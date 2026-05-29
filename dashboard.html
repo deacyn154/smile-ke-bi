@@ -218,11 +218,10 @@ tr:hover td { background:rgba(108,142,242,0.05); }
 </div>
 
 <script>
-// ============ LOGIN ============
+// ============ LOGIN (暂关) ============
 const PWD_HASH = '33f17839cb399b359a0deaa4387a29ca211dd8be792019288aeffb029e692b46';
 (async function(){
-    if(sessionStorage.getItem('_auth')){ document.getElementById('loginOverlay').style.display='none'; document.getElementById('dashboard').style.display='block'; initDashboard(); return; }
-    document.getElementById('dashboard').style.display='none';
+    document.getElementById('loginOverlay').style.display='none'; document.getElementById('dashboard').style.display='block'; initDashboard();
 })();
 async function sha256(m){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(m));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
 async function doLogin(){
@@ -574,14 +573,31 @@ function renderStore(data) {
     const stores = groupBy(data,['store_name']);
     stores.sort((a,b)=>b.revenue-a.revenue);
     const names=stores.map(s=>short(s.store_name));
+    // 计算Y轴范围：0点对齐（有负毛利时左轴也往下移）
+    const maxOrd = Math.max(...stores.map(s=>s.order_cnt||0), 1);
+    const pftVals = stores.map(s=>s.commission_profit||0);
+    const minPft = Math.min(...pftVals, 0);
+    const maxPft = Math.max(...pftVals, 1);
+    const padO = maxOrd * 0.15, padP = Math.max((maxPft - minPft) * 0.15, 1);
+    let leftRng, rightRng;
+    if (minPft >= 0) {
+        leftRng = [0, maxOrd + padO]; rightRng = [0, maxPft + padP];
+    } else {
+        const rMin = minPft - padP, rMax = maxPft + padP;
+        rightRng = [rMin, rMax];
+        const zeroRatio = Math.abs(rMin) / (rMax - rMin);
+        const leftNeg = (zeroRatio * (maxOrd + padO)) / (1 - zeroRatio);
+        leftRng = [-leftNeg, maxOrd + padO];
+    }
+
     // 双Y轴并列：offsetgroup让两个不同Y轴的bar分组并排
     Plotly.newPlot('chartStoreBar',[
         {x:names,y:stores.map(s=>s.order_cnt||0),name:'单量',type:'bar',marker:{color:'#5B8FF9'},offsetgroup:0},
         {x:names,y:stores.map(s=>s.commission_profit||0),name:'抽佣毛利',type:'bar',marker:{color:'#FF9F43'},yaxis:'y2',offsetgroup:1}
     ],{...plotlyLayout,barmode:'group',
         xaxis:{...plotlyLayout.xaxis,tickangle:-45},
-        yaxis:{title:'单量',gridcolor:'rgba(0,0,0,0)',zerolinecolor:'#2a2d3a',rangemode:'tozero'},
-        yaxis2:{title:'抽佣毛利(元)',overlaying:'y',side:'right',gridcolor:'rgba(0,0,0,0)',rangemode:'tozero'},
+        yaxis:{title:'单量',gridcolor:'rgba(0,0,0,0)',zerolinecolor:'#2a2d3a',range:leftRng},
+        yaxis2:{title:'抽佣毛利(元)',overlaying:'y',side:'right',gridcolor:'rgba(0,0,0,0)',range:rightRng},
         margin:{l:50,r:60,t:20,b:100}
     },plotlyCfg);
 
@@ -680,6 +696,21 @@ function renderTimeAnalysis(data) {
     const tOrders = trendLine(orders);
     const tProfits = trendLine(profits);
 
+    // 计算范围：0点对齐（有负毛利时左轴也往下移）
+    const maxO = Math.max(...orders, 1);
+    const minP = Math.min(...profits, 0);
+    const maxP = Math.max(...profits, 1);
+    const padOT = maxO * 0.15, padPT = Math.max((maxP - minP) * 0.15, 1);
+    let leftRngT, rightRngT;
+    if (minP >= 0) {
+        leftRngT = [0, maxO + padOT]; rightRngT = [0, maxP + padPT];
+    } else {
+        const rMin = minP - padPT, rMax = maxP + padPT;
+        rightRngT = [rMin, rMax];
+        const zeroRatio = Math.abs(rMin) / (rMax - rMin);
+        const leftNeg = (zeroRatio * (maxO + padOT)) / (1 - zeroRatio);
+        leftRngT = [-leftNeg, maxO + padOT];
+    }
     // 双Y轴并列：蓝=单量(左轴)，橙=抽佣毛利+虚线(右轴)
     Plotly.newPlot('chartTimeTrend', [
         { x: dates, y: orders, name: '单量', type: 'bar', marker: {color:'#5B8FF9'}, offsetgroup: 0 },
@@ -688,8 +719,8 @@ function renderTimeAnalysis(data) {
     ], {
         ...plotlyLayout, height: chartH + 40, barmode: 'group',
         xaxis: { ...plotlyLayout.xaxis, title: '日期', type: 'date', tickformat: '%m-%d', dtick: 'D1' },
-        yaxis: { title: '单量', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', rangemode:'tozero' },
-        yaxis2: { title: '抽佣毛利(元)', overlaying:'y', side:'right', gridcolor: 'rgba(0,0,0,0)', rangemode:'tozero' },
+        yaxis: { title: '单量', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', range: leftRngT },
+        yaxis2: { title: '抽佣毛利(元)', overlaying:'y', side:'right', gridcolor: 'rgba(0,0,0,0)', range: rightRngT },
         legend: { orientation: 'h', y: 1.1, font: {color:'#e8eaf0',size:11} },
         margin: { l: 50, r: 60, t: 20, b: 50 }
     }, plotlyCfg);
