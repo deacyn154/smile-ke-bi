@@ -395,13 +395,13 @@ function createChips(containerId, items, selectedArr, onChange) {
 }
 
 function selectAll(type) {
-    if (type==='stores') selectedStores=[...allStoresFull];
-    else selectedChannels=[...allChannels];
+    if (type==='stores') { selectedStores.splice(0, selectedStores.length, ...allStoresFull); }
+    else { selectedChannels.splice(0, selectedChannels.length, ...allChannels); }
     refreshChips(); refresh();
 }
 function deselectAll(type) {
-    if (type==='stores') selectedStores=[];
-    else selectedChannels=[];
+    if (type==='stores') { selectedStores.splice(0, selectedStores.length); }
+    else { selectedChannels.splice(0, selectedChannels.length); }
     refreshChips(); refresh();
 }
 function refreshChips() {
