@@ -303,7 +303,7 @@ function renderCalendar() {
         let day = daysInPrev - i;
         let d = new Date(y,m-1,day);
         let ds = dFmt(d);
-        html += '<div class="cal-day other-month" data-date="'+ds+'" onclick="calClick(''+ds+'')">'+day+'</div>';
+        html += '<div class="cal-day other-month" data-date="'+ds+'" onclick="calClick(\''+ds+'\')">'+day+'</div>';
     }
     // this month
     for (let d=1; d<=daysInMonth; d++) {
@@ -320,7 +320,7 @@ function renderCalendar() {
         } else if (calSelect.length===1 && calSelect[0]===ds) {
             cls += ' range-start range-end';
         }
-        html += '<div class="'+cls+'" data-date="'+ds+'" onclick="calClick(''+ds+'')">'+d+'</div>';
+        html += '<div class="'+cls+'" data-date="'+ds+'" onclick="calClick(\''+ds+'\')">'+d+'</div>';
     }
     // next month
     let total = first + daysInMonth;
@@ -328,7 +328,7 @@ function renderCalendar() {
     for (let d=1; d<=remaining; d++) {
         let dt = new Date(y,m+1,d);
         let ds = dFmt(dt);
-        html += '<div class="cal-day other-month" data-date="'+ds+'" onclick="calClick(''+ds+'')">'+d+'</div>';
+        html += '<div class="cal-day other-month" data-date="'+ds+'" onclick="calClick(\''+ds+'\')">'+d+'</div>';
     }
     document.getElementById('calGrid').innerHTML = html;
     updateCalRange();
