@@ -18,13 +18,15 @@
     --red: #E86452;
     --blue: #5B8FF9;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
+    overflow-x: hidden;
 }
+/* === Desktop Layout === */
 .dashboard {
     max-width: 1440px;
     margin: 0 auto;
@@ -45,37 +47,95 @@ body {
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
 }
-.filters {
-    display: flex;
-    gap: 16px;
-    flex-wrap: wrap;
-    align-items: center;
-    padding: 16px 20px;
+/* === Filter Chips (replaces multi-select) === */
+.filter-bar {
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: 12px;
+    padding: 16px 20px;
     margin-bottom: 24px;
 }
-.filter-group { display: flex; align-items: center; gap: 8px; }
-.filter-group label { color: var(--text-dim); font-size: 13px; font-weight: 500; white-space: nowrap; }
-.filter-group select {
-    background: var(--bg); color: var(--text); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 12px; font-size: 13px; outline: none;
+.filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
 }
-.filter-group select:focus { border-color: var(--accent); }
+.filter-row:last-child { margin-bottom: 0; }
+.filter-label {
+    color: var(--text-dim);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    min-width: 40px;
+}
+.chip-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    flex: 1;
+}
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text-dim);
+    transition: all 0.15s;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: manipulation;
+}
+.chip:hover { border-color: var(--accent); color: var(--text); }
+.chip.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+}
+.chip .count {
+    font-size: 11px;
+    opacity: 0.6;
+}
+.chip-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+}
+.chip-action {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-dim);
+    transition: all 0.15s;
+    touch-action: manipulation;
+}
+.chip-action:hover { border-color: var(--accent); color: var(--text); }
+/* === KPI Cards === */
 .kpi-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 16px;
     margin-bottom: 24px;
 }
 .kpi-card {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 20px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
     transition: transform 0.2s, box-shadow 0.2s;
 }
 .kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-.kpi-label { color: var(--text-dim); font-size: 13px; margin-bottom: 8px; }
+.kpi-label { color: var(--text-dim); font-size: 13px; margin-bottom: 6px; }
 .kpi-value { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
 .kpi-sub { font-size: 12px; margin-top: 6px; }
 .accent .kpi-value { color: var(--accent); }
@@ -83,26 +143,59 @@ body {
 .yellow .kpi-value { color: var(--yellow); }
 .red .kpi-value { color: var(--red); }
 .blue .kpi-value { color: var(--blue); }
+/* === Tabs === */
+.tab-nav-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 20px;
+    scrollbar-width: none;
+}
+.tab-nav-wrap::-webkit-scrollbar { display: none; }
 .tab-nav {
-    display: flex; gap: 4px; margin-bottom: 20px;
-    background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 4px;
+    display: inline-flex;
+    gap: 4px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    min-width: 100%;
 }
 .tab-btn {
-    flex: 1; padding: 10px 16px; border: none; background: transparent;
-    color: var(--text-dim); font-size: 14px; font-weight: 500;
-    border-radius: 8px; cursor: pointer; transition: all 0.2s;
+    flex-shrink: 0;
+    padding: 10px 18px;
+    border: none;
+    background: transparent;
+    color: var(--text-dim);
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    touch-action: manipulation;
 }
 .tab-btn.active { background: var(--accent); color: #fff; }
-.tab-btn:hover:not(.active) { background: rgba(108,142,242,0.1); color: var(--text); }
+.tab-btn:active:not(.active) { background: rgba(108,142,242,0.2); }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+/* === Charts === */
 .chart-section {
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; padding: 20px; margin-bottom: 16px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 16px;
 }
 .chart-section h3 { font-size: 15px; margin-bottom: 16px; color: var(--text-dim); }
 .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* === Tables === */
+.table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+.table-scroll table { min-width: 700px; width: 100%; border-collapse: collapse; font-size: 13px; }
 th {
     text-align: left; padding: 10px 12px; background: var(--bg);
     color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border);
@@ -110,15 +203,48 @@ th {
 }
 td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 tr:hover td { background: rgba(108,142,242,0.05); }
-.table-wrap { max-height: 500px; overflow-y: auto; border-radius: 8px; border: 1px solid var(--border); }
+.table-wrap { max-height: 500px; overflow-y: auto; border-radius: 8px; }
 .badge {
     display: inline-block; padding: 2px 8px; border-radius: 4px;
     font-size: 12px; font-weight: 500;
 }
 .badge-warn { background: rgba(232,100,82,0.15); color: var(--red); }
 .badge-ok { background: rgba(90,216,166,0.15); color: var(--green); }
-@media (max-width: 900px) {
-    .row { grid-template-columns: 1fr; }
+/* === Mobile Optimizations === */
+@media (max-width: 768px) {
+    .dashboard { padding: 12px; }
+    .header { flex-direction: column; align-items: flex-start; gap: 4px; }
+    .header h1 { font-size: 20px; }
+    .filter-bar { padding: 12px; border-radius: 10px; }
+    .filter-row { flex-direction: column; align-items: flex-start; margin-bottom: 8px; }
+    .chip-actions { margin-left: 0; width: 100%; justify-content: flex-start; }
+    .chip { padding: 6px 10px; font-size: 11px; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .kpi-card { padding: 14px; }
+    .kpi-value { font-size: 22px; }
+    .kpi-label { font-size: 11px; }
+    .chart-section { padding: 12px; border-radius: 10px; }
+    .chart-section h3 { font-size: 13px; }
+    .row { grid-template-columns: 1fr; gap: 12px; }
+    .tab-nav-wrap { margin-bottom: 12px; }
+    .tab-btn { padding: 8px 14px; font-size: 13px; }
+    .table-scroll table { min-width: 600px; font-size: 12px; }
+    th, td { padding: 6px 8px; }
+}
+@media (max-width: 480px) {
+    .kpi-card { padding: 10px; }
+    .kpi-value { font-size: 18px; }
+    .kpi-sub { font-size: 10px; }
+    .table-scroll table { min-width: 500px; font-size: 11px; }
+    th, td { padding: 4px 6px; }
+    .chip { padding: 5px 8px; font-size: 10px; }
+}
+/* Desktop KPI: 6 col */
+@media (min-width: 1024px) {
+    .kpi-grid { grid-template-columns: repeat(6, 1fr); }
+}
+/* Tablet KPI: 3 col */
+@media (min-width: 769px) and (max-width: 1023px) {
     .kpi-grid { grid-template-columns: repeat(3, 1fr); }
 }
 </style>
@@ -130,34 +256,42 @@ tr:hover td { background: rgba(108,142,242,0.05); }
         <div class="update-time" id="updateTime"></div>
     </div>
 
-    <div class="filters">
-        <div class="filter-group">
-            <label>📅 日期:</label>
-            <select id="dateFrom"></select>
-            <span style="color:var(--text-dim)">~</span>
-            <select id="dateTo"></select>
+    <div class="filter-bar">
+        <div class="filter-row">
+            <span class="filter-label">📅 日期</span>
+            <div class="chip-group">
+                <select id="dateFrom" class="chip" style="padding:5px 12px;border-radius:20px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);outline:none;"></select>
+                <span style="color:var(--text-dim);font-size:12px;">~</span>
+                <select id="dateTo" class="chip" style="padding:5px 12px;border-radius:20px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);outline:none;"></select>
+            </div>
         </div>
-        <div class="filter-group">
-            <label>🏪 门店:</label>
-            <select id="storeSelect" multiple size="3"></select>
+        <div class="filter-row">
+            <span class="filter-label">🏪 门店</span>
+            <div class="chip-group" id="storeChips"></div>
+            <div class="chip-actions">
+                <button class="chip-action" onclick="selectAll('stores')">全选</button>
+                <button class="chip-action" onclick="deselectAll('stores')">清空</button>
+            </div>
         </div>
-        <div class="filter-group">
-            <label>📡 渠道:</label>
-            <select id="channelSelect" multiple size="3"></select>
-        </div>
-        <div class="filter-group">
-            <button onclick="selectAllStores()" style="background:var(--accent);color:#fff;border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;">全选</button>
-            <button onclick="deselectAllStores()" style="background:var(--border);color:var(--text);border:none;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;">清空</button>
+        <div class="filter-row">
+            <span class="filter-label">📡 渠道</span>
+            <div class="chip-group" id="channelChips"></div>
+            <div class="chip-actions">
+                <button class="chip-action" onclick="selectAll('channels')">全选</button>
+                <button class="chip-action" onclick="deselectAll('channels')">清空</button>
+            </div>
         </div>
     </div>
 
     <div class="kpi-grid" id="kpiGrid"></div>
 
-    <div class="tab-nav">
-        <button class="tab-btn active" onclick="switchTab('store',this)">门店经营</button>
-        <button class="tab-btn" onclick="switchTab('channel',this)">渠道分析</button>
-        <button class="tab-btn" onclick="switchTab('neg',this)">负毛利分析</button>
-        <button class="tab-btn" onclick="switchTab('promo',this)">推广分析</button>
+    <div class="tab-nav-wrap">
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('store',this)">门店经营</button>
+            <button class="tab-btn" onclick="switchTab('channel',this)">渠道分析</button>
+            <button class="tab-btn" onclick="switchTab('neg',this)">负毛利分析</button>
+            <button class="tab-btn" onclick="switchTab('promo',this)">推广分析</button>
+        </div>
     </div>
 
     <div id="tab-store" class="tab-content active">
@@ -167,7 +301,7 @@ tr:hover td { background: rgba(108,142,242,0.05); }
         </div>
         <div class="chart-section">
             <h3>门店明细</h3>
-            <div class="table-wrap" id="storeTable"></div>
+            <div class="table-scroll" id="storeTable"></div>
         </div>
     </div>
 
@@ -194,7 +328,7 @@ tr:hover td { background: rgba(108,142,242,0.05); }
         </div>
         <div class="chart-section">
             <h3>渠道明细</h3>
-            <div class="table-wrap" id="channelTable"></div>
+            <div class="table-scroll" id="channelTable"></div>
         </div>
     </div>
 
@@ -205,7 +339,7 @@ tr:hover td { background: rgba(108,142,242,0.05); }
         </div>
         <div class="chart-section">
             <h3>负毛利占比 TOP 门店</h3>
-            <div class="table-wrap" id="negTable"></div>
+            <div class="table-scroll" id="negTable"></div>
         </div>
     </div>
 
@@ -216,7 +350,7 @@ tr:hover td { background: rgba(108,142,242,0.05); }
         </div>
         <div class="chart-section">
             <h3>渠道推广汇总</h3>
-            <div class="table-wrap" id="promoTable"></div>
+            <div class="table-scroll" id="promoTable"></div>
         </div>
     </div>
 </div>
@@ -235,15 +369,61 @@ const plotlyLayout = {
     xaxis: { gridcolor: '#2a2d3a', zerolinecolor: '#2a2d3a' },
     yaxis: { gridcolor: '#2a2d3a', zerolinecolor: '#2a2d3a' },
     margin: { l: 60, r: 20, t: 30, b: 80 },
-    height: 420
+    height: chartH
 };
 const plotlyCfg = { displayModeBar: false, responsive: true };
+const isMobile = window.innerWidth < 768;
+const chartH = isMobile ? 280 : 420;
+const chartHSmall = isMobile ? 240 : 380;
 
-// --- Filters ---
+// --- Filter State ---
 const dateFrom = document.getElementById('dateFrom');
 const dateTo = document.getElementById('dateTo');
-const storeSelect = document.getElementById('storeSelect');
-const channelSelect = document.getElementById('channelSelect');
+let selectedStores = [...allStores];
+let selectedChannels = [...allChannels];
+
+function createChips(containerId, items, selectedArr, onChange) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    items.forEach(item => {
+        const chip = document.createElement('span');
+        chip.className = 'chip active';
+        chip.textContent = item;
+        chip.onclick = function() {
+            const idx = selectedArr.indexOf(item);
+            if (idx > -1) {
+                selectedArr.splice(idx, 1);
+                this.classList.remove('active');
+            } else {
+                selectedArr.push(item);
+                this.classList.add('active');
+            }
+            if (onChange) onChange();
+        };
+        container.appendChild(chip);
+    });
+}
+
+function selectAll(type) {
+    if (type === 'stores') { selectedStores = [...allStores]; }
+    else { selectedChannels = [...allChannels]; }
+    refreshChips();
+    refresh();
+}
+function deselectAll(type) {
+    if (type === 'stores') { selectedStores = []; }
+    else { selectedChannels = []; }
+    refreshChips();
+    refresh();
+}
+function refreshChips() {
+    document.querySelectorAll('#storeChips .chip').forEach(c => {
+        c.classList.toggle('active', selectedStores.includes(c.textContent));
+    });
+    document.querySelectorAll('#channelChips .chip').forEach(c => {
+        c.classList.toggle('active', selectedChannels.includes(c.textContent));
+    });
+}
 
 function initFilters() {
     allDates.forEach(d => {
@@ -251,21 +431,9 @@ function initFilters() {
         dateTo.innerHTML += '<option value="' + d + '">' + d + '</option>';
     });
     dateTo.value = allDates[allDates.length - 1];
-    allStores.forEach(s => {
-        const opt = document.createElement('option');
-        opt.value = s; opt.textContent = s; opt.selected = true;
-        storeSelect.appendChild(opt);
-    });
-    allChannels.forEach(c => {
-        const opt = document.createElement('option');
-        opt.value = c; opt.textContent = c; opt.selected = true;
-        channelSelect.appendChild(opt);
-    });
+    createChips('storeChips', allStores, selectedStores, refresh);
+    createChips('channelChips', allChannels, selectedChannels, refresh);
 }
-
-function getSelected(sel) { return [...sel.selectedOptions].map(o => o.value); }
-function selectAllStores() { [...storeSelect.options].forEach(o => o.selected = true); refresh(); }
-function deselectAllStores() { [...storeSelect.options].forEach(o => o.selected = false); refresh(); }
 
 function switchTab(name, btn) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
@@ -298,20 +466,18 @@ function groupBy(arr, keys) {
 
 function getFilteredData() {
     const from = dateFrom.value, to = dateTo.value;
-    const stores = getSelected(storeSelect), channels = getSelected(channelSelect);
     return rawData.filter(r =>
         r['日期'] >= from && r['日期'] <= to &&
-        stores.includes(r['store_name']) &&
-        channels.includes(r['channel'])
+        selectedStores.includes(r['store_name']) &&
+        selectedChannels.includes(r['channel'])
     );
 }
 
 function getFilteredPromo() {
     const from = dateFrom.value, to = dateTo.value;
-    const stores = getSelected(storeSelect);
     return promoData.filter(r =>
         r['日期'] >= from && r['日期'] <= to &&
-        stores.includes(r['store_name'])
+        selectedStores.includes(r['store_name'])
     );
 }
 
@@ -370,25 +536,25 @@ function renderChannel(data) {
         type: 'pie', hole: 0.45,
         marker: { colors: ['#5B8FF9','#F6BD16','#5AD8A6','#E86452'] },
         textinfo: 'label+percent', textposition: 'outside'
-    }], { ...plotlyLayout, height: 380, showlegend: false }, plotlyCfg);
+    }], { ...plotlyLayout, height: chartHSmall, showlegend: false }, plotlyCfg);
 
     const chRev = [...channels].sort((a,b) => b.revenue - a.revenue);
     Plotly.newPlot('chartChannelRev', [{
         y: chRev.map(c => c.channel), x: chRev.map(c => c.revenue),
         type: 'bar', orientation: 'h', marker: { color: '#5B8FF9' }
-    }], { ...plotlyLayout, height: 380, xaxis: { ...plotlyLayout.xaxis, title: '营收(元)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
+    }], { ...plotlyLayout, height: chartHSmall, xaxis: { ...plotlyLayout.xaxis, title: '营收(元)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
 
     const chProfit = [...channels].sort((a,b) => b.real_profit - a.real_profit);
     Plotly.newPlot('chartChannelProfit', [{
         y: chProfit.map(c => c.channel), x: chProfit.map(c => c.real_profit),
         type: 'bar', orientation: 'h', marker: { color: '#5AD8A6' }
-    }], { ...plotlyLayout, height: 380, xaxis: { ...plotlyLayout.xaxis, title: '真实毛利(元)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
+    }], { ...plotlyLayout, height: chartHSmall, xaxis: { ...plotlyLayout.xaxis, title: '真实毛利(元)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
 
     const chMargin = [...channels].sort((a,b) => (b.real_profit/(b.revenue||1)) - (a.real_profit/(a.revenue||1)));
     Plotly.newPlot('chartChannelMargin', [{
         y: chMargin.map(c => c.channel), x: chMargin.map(c => c.revenue > 0 ? (c.real_profit/c.revenue*100).toFixed(1) : 0),
         type: 'bar', orientation: 'h', marker: { color: '#F6BD16' }
-    }], { ...plotlyLayout, height: 380, xaxis: { ...plotlyLayout.xaxis, title: '毛利率(%)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
+    }], { ...plotlyLayout, height: chartHSmall, xaxis: { ...plotlyLayout.xaxis, title: '毛利率(%)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
 
     let html = '<table><tr><th>渠道</th><th>单量</th><th>占比(%)</th><th>营收</th><th>真实毛利</th><th>推广费</th><th>毛利率(%)</th><th>负毛利占比</th></tr>';
     channels.forEach(c => {
@@ -480,7 +646,8 @@ function refresh() {
 // --- Init ---
 initFilters();
 document.getElementById('updateTime').textContent = '数据更新: ' + allDates[allDates.length - 1];
-[dateFrom, dateTo, storeSelect, channelSelect].forEach(el => el.addEventListener('change', refresh));
+dateFrom.addEventListener('change', refresh);
+dateTo.addEventListener('change', refresh);
 refresh();
 </script>
 </body>
