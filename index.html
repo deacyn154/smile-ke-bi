@@ -219,7 +219,7 @@ tr:hover td { background:rgba(108,142,242,0.05); }
 
 <script>
 // ============ LOGIN ============
-const PWD_HASH = '6d27e63b678c68ef608b4d99e5c80a1c9fd85b4b9ba02eaa178adf715205fa0c';
+const PWD_HASH = '33f17839cb399b359a0deaa4387a29ca211dd8be792019288aeffb029e692b46';
 (async function(){
     if(sessionStorage.getItem('_auth')){ document.getElementById('loginOverlay').style.display='none'; document.getElementById('dashboard').style.display='block'; initDashboard(); return; }
     document.getElementById('dashboard').style.display='none';
@@ -680,17 +680,18 @@ function renderTimeAnalysis(data) {
     const tOrders = trendLine(orders);
     const tProfits = trendLine(profits);
 
-    // 并列柱状图：蓝=单量，橙=抽佣毛利+虚线趋势，无网格线
+    // 双Y轴并列：蓝=单量(左轴)，橙=抽佣毛利+虚线(右轴)
     Plotly.newPlot('chartTimeTrend', [
-        { x: dates, y: orders, name: '单量', type: 'bar', marker: {color:'#5B8FF9'} },
-        { x: dates, y: profits, name: '抽佣毛利', type: 'bar', marker: {color:'#FF9F43'} },
-        { x: tProfits.x, y: tProfits.y, name: '毛利趋势', type: 'scatter', mode: 'lines', line: {color:'#FF9F43',width:2,dash:'dot'}, showlegend: true }
+        { x: dates, y: orders, name: '单量', type: 'bar', marker: {color:'#5B8FF9'}, offsetgroup: 0 },
+        { x: dates, y: profits, name: '抽佣毛利', type: 'bar', marker: {color:'#FF9F43'}, yaxis:'y2', offsetgroup: 1 },
+        { x: tProfits.x, y: tProfits.y, name: '毛利趋势', type: 'scatter', mode: 'lines', line: {color:'#FF9F43',width:2,dash:'dot'}, yaxis:'y2', showlegend: true }
     ], {
         ...plotlyLayout, height: chartH + 40, barmode: 'group',
         xaxis: { ...plotlyLayout.xaxis, title: '日期', type: 'date', tickformat: '%m-%d', dtick: 'D1' },
-        yaxis: { title: '', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a' },
+        yaxis: { title: '单量', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', rangemode:'tozero' },
+        yaxis2: { title: '抽佣毛利(元)', overlaying:'y', side:'right', gridcolor: 'rgba(0,0,0,0)', rangemode:'tozero' },
         legend: { orientation: 'h', y: 1.1, font: {color:'#e8eaf0',size:11} },
-        margin: { l: 50, r: 10, t: 20, b: 50 }
+        margin: { l: 50, r: 60, t: 20, b: 50 }
     }, plotlyCfg);
 
     // 每日明细表
