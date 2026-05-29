@@ -583,14 +583,16 @@ function renderKPIs(data) {
     const dAdc = deltaStr(parseFloat(adc), pAdc, false);
 
     document.getElementById('kpiGrid').innerHTML =
+        // 第一行
         '<div class="kpi-card blue"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div><div class="kpi-sub" style="color:var(--'+dOrd.cls+')">'+dOrd.txt+'</div></div>'+
         '<div class="kpi-card accent"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div><div class="kpi-sub" style="color:var(--'+dRev.cls+')">'+dRev.txt+'</div></div>'+
+        '<div class="kpi-card accent"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div><div class="kpi-sub" style="color:var(--'+dAov.cls+')">'+dAov.txt+'</div></div>'+
         '<div class="kpi-card green"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--'+dGp.cls+')">'+dGp.txt+'</div></div>'+
+        '<div class="kpi-card green"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-sub" style="color:var(--'+dCp.cls+')">'+dCp.txt+'</div></div>'+
+        // 第二行
         '<div class="kpi-card red"><div class="kpi-label">推广</div><div class="kpi-value">¥'+(pf.toFixed(0))+'</div><div class="kpi-sub" style="color:var(--'+dPf.cls+')">'+dPf.txt+'</div></div>'+
         '<div class="kpi-card orange"><div class="kpi-label">抽佣</div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-sub" style="color:var(--'+dCc.cls+')">'+dCc.txt+'</div></div>'+
-        '<div class="kpi-card green"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-sub" style="color:var(--'+dCp.cls+')">'+dCp.txt+'</div></div>'+
         '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div><div class="kpi-sub" style="color:var(--'+dMarg.cls+')">'+dMarg.txt+'</div></div>'+
-        '<div class="kpi-card accent"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div><div class="kpi-sub" style="color:var(--'+dAov.cls+')">'+dAov.txt+'</div></div>'+
         '<div class="kpi-card '+ngCls+'"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub" style="color:var(--'+dNeg.cls+')">'+dNeg.txt+'</div></div>'+
         '<div class="kpi-card orange"><div class="kpi-label">单均配送</div><div class="kpi-value">¥'+adc+'</div><div class="kpi-sub" style="color:var(--'+dAdc.cls+')">'+dAdc.txt+'</div></div>';
 }
