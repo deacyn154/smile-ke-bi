@@ -124,6 +124,14 @@ print(f'Saved: {promo_path}')
 print('\n=== Processing Order Detail ===')
 df_order = pd.read_excel(os.path.join(DATA, '实时订单明细.xlsx'), header=1)
 df_order = df_order.rename(columns={'Unnamed: 4': 'order_time'})
+
+# Filter out cancelled orders (线上毛利率 == '-')
+before = len(df_order)
+df_order = df_order[df_order['线上毛利率'] != '-'].copy()
+cancelled = before - len(df_order)
+print(f'Cancelled orders (线上毛利率=-): {cancelled}')
+print(f'Valid orders: {len(df_order)}')
+
 df_order['order_date'] = pd.to_datetime(df_order['order_time']).dt.date
 
 # Add qn_store_id from mapping (via store name)
@@ -181,7 +189,7 @@ delivery_ord.columns = ['日期', 'store_name', 'channel', 'delivery_order_cnt']
 # Aggregate by date + store + channel
 daily = df_order.groupby(['order_date', '门店', 'qn_store_id', '渠道名称']).agg(
     order_cnt=('订单号', 'count'),
-    revenue=('实付金额', 'sum'),
+    revenue=('预计收入', 'sum'),  # Y列: 预计收入 = 实收
     gross_profit=('线上毛利', 'sum'),
     income=('收入', 'sum'),
     cost=('成本', 'sum'),
