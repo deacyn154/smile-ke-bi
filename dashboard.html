@@ -190,6 +190,7 @@ tr:hover td { background:rgba(108,142,242,0.05); }
     </div>
     <div id="tab-time" class="tab-content">
         <div class="chart-section"><h3>每日单量 & 抽佣毛利趋势</h3><div id="chartTimeTrend"></div></div>
+        <div class="chart-section"><h3>每日明细</h3><div class="table-scroll" id="timeTable"></div></div>
     </div>
 </div>
 
@@ -641,6 +642,16 @@ function renderTimeAnalysis(data) {
         legend: { orientation: 'h', y: 1.1, font: {color:'#e8eaf0',size:11} },
         margin: { l: 60, r: 20, t: 40, b: 60 }
     }, plotlyCfg);
+
+    // 每日明细表
+    let h='<table><tr><th>日期</th><th>单量</th><th>实收</th><th>门店毛利</th><th>抽佣</th><th>抽佣毛利</th><th>毛利率</th></tr>';
+    byDate.forEach(d=>{
+        const rev=d.revenue||0, rp=d.real_profit||0, cf=d.commission_fee||0, cp=d.commission_profit||0;
+        const mg=rev>0?(cp/rev*100).toFixed(1):'0.0';
+        h+='<tr><td>'+d.日期+'</td><td>'+(d.order_cnt||0).toLocaleString()+'</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cf)+'</td><td>'+fmtY(cp)+'</td><td>'+mg+'%</td></tr>';
+    });
+    h+='</table>';
+    document.getElementById('timeTable').innerHTML=h;
 }
 
 // ============ REFRESH ============
