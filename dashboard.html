@@ -2,279 +2,159 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>微笑客经营看板</title>
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
 <style>
 :root {
-    --bg: #0f1117;
-    --card: #1a1d29;
-    --border: #2a2d3a;
-    --text: #e8eaf0;
-    --text-dim: #8b8fa3;
-    --accent: #6C8EF2;
-    --green: #5AD8A6;
-    --yellow: #F6BD16;
-    --red: #E86452;
-    --blue: #5B8FF9;
+    --bg: #0f1117; --card: #1a1d29; --border: #2a2d3a;
+    --text: #e8eaf0; --text-dim: #8b8fa3;
+    --accent: #6C8EF2; --green: #5AD8A6; --yellow: #F6BD16; --red: #E86452; --blue: #5B8FF9;
+    --orange: #FF9F43;
 }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    overflow-x: hidden;
+body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
+.dashboard { max-width:1440px; margin:0 auto; padding:24px; }
+.header { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; padding-bottom:12px; border-bottom:1px solid var(--border); }
+.header h1 { font-size:22px; font-weight:700; background:linear-gradient(135deg,var(--blue),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+.update-time { color:var(--text-dim); font-size:12px; }
+/* === Filter Bar === */
+.filter-bar { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 16px; margin-bottom:20px; }
+.filter-row { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-bottom:8px; }
+.filter-row:last-child { margin-bottom:0; }
+.filter-label { color:var(--text-dim); font-size:12px; font-weight:500; white-space:nowrap; min-width:36px; }
+/* Quick date buttons */
+.date-quick { display:flex; gap:4px; flex-wrap:wrap; }
+.date-btn { padding:4px 10px; border-radius:14px; font-size:11px; font-weight:500; cursor:pointer; border:1px solid var(--border); background:var(--bg); color:var(--text-dim); transition:all .15s; touch-action:manipulation; }
+.date-btn.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.date-btn:hover:not(.active) { border-color:var(--accent); color:var(--text); }
+/* Calendar */
+.calendar-wrap { margin-top:8px; border-top:1px solid var(--border); padding-top:8px; display:none; }
+.calendar-wrap.show { display:block; }
+.cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.cal-header .cal-nav { cursor:pointer; color:var(--text-dim); font-size:13px; padding:4px 8px; border-radius:6px; background:var(--bg); border:1px solid var(--border); user-select:none; }
+.cal-header .cal-nav:hover { border-color:var(--accent); color:var(--text); }
+.cal-header .cal-title { font-size:14px; font-weight:600; }
+.cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
+.cal-grid .cal-weekday { text-align:center; font-size:10px; color:var(--text-dim); padding:4px 0; }
+.cal-grid .cal-day { text-align:center; font-size:12px; padding:4px 0; border-radius:6px; cursor:pointer; color:var(--text-dim); transition:all .1s; }
+.cal-grid .cal-day:hover { background:rgba(108,142,242,0.15); }
+.cal-grid .cal-day.in-range { background:rgba(108,142,242,0.25); color:var(--text); border-radius:0; }
+.cal-grid .cal-day.range-start { background:var(--accent); color:#fff; border-radius:6px 0 0 6px; }
+.cal-grid .cal-day.range-end { background:var(--accent); color:#fff; border-radius:0 6px 6px 0; }
+.cal-grid .cal-day.range-start.range-end { border-radius:6px; }
+.cal-grid .cal-day.other-month { color:rgba(139,143,163,0.3); }
+.cal-toggle { color:var(--accent); font-size:12px; cursor:pointer; padding:3px 8px; border-radius:10px; border:1px solid var(--border); background:transparent; touch-action:manipulation; }
+.cal-toggle:hover { background:rgba(108,142,242,0.1); }
+/* Store search */
+.store-search { width:100%; padding:6px 10px; border-radius:16px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; outline:none; margin-bottom:6px; }
+.store-search:focus { border-color:var(--accent); }
+.store-search::placeholder { color:var(--text-dim); }
+.chip-group { display:flex; flex-wrap:wrap; gap:4px; flex:1; }
+.chip { display:inline-flex; align-items:center; gap:3px; padding:4px 10px; border-radius:16px; font-size:11px; font-weight:500; cursor:pointer; border:1px solid var(--border); background:var(--bg); color:var(--text-dim); transition:all .12s; user-select:none; touch-action:manipulation; }
+.chip.hidden { display:none; }
+.chip:hover { border-color:var(--accent); color:var(--text); }
+.chip.active { background:var(--accent); border-color:var(--accent); color:#fff; }
+.chip-actions { display:flex; gap:4px; margin-left:auto; }
+.chip-action { padding:4px 10px; border-radius:14px; font-size:11px; font-weight:500; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--text-dim); transition:all .12s; touch-action:manipulation; }
+.chip-action:hover { border-color:var(--accent); color:var(--text); }
+/* KPI */
+.kpi-grid { display:grid; gap:12px; margin-bottom:20px; }
+.kpi-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; }
+.kpi-label { color:var(--text-dim); font-size:12px; margin-bottom:4px; }
+.kpi-value { font-size:24px; font-weight:700; letter-spacing:-0.3px; }
+.kpi-sub { font-size:11px; margin-top:4px; }
+.accent .kpi-value { color:var(--accent); }
+.green .kpi-value { color:var(--green); }
+.yellow .kpi-value { color:var(--yellow); }
+.red .kpi-value { color:var(--red); }
+.blue .kpi-value { color:var(--blue); }
+.orange .kpi-value { color:var(--orange); }
+/* Tabs */
+.tab-nav-wrap { overflow-x:auto; -webkit-overflow-scrolling:touch; margin-bottom:16px; scrollbar-width:none; }
+.tab-nav-wrap::-webkit-scrollbar { display:none; }
+.tab-nav { display:inline-flex; gap:4px; background:var(--card); border:1px solid var(--border); border-radius:10px; padding:3px; min-width:100%; }
+.tab-btn { flex-shrink:0; padding:8px 16px; border:none; background:transparent; color:var(--text-dim); font-size:13px; font-weight:500; border-radius:7px; cursor:pointer; transition:all .15s; white-space:nowrap; touch-action:manipulation; }
+.tab-btn.active { background:var(--accent); color:#fff; }
+.tab-content { display:none; }
+.tab-content.active { display:block; }
+.chart-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px; }
+.chart-section h3 { font-size:13px; margin-bottom:12px; color:var(--text-dim); }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:8px; border:1px solid var(--border); }
+.table-scroll table { min-width:700px; width:100%; border-collapse:collapse; font-size:12px; }
+th { text-align:left; padding:8px 10px; background:var(--bg); color:var(--text-dim); font-weight:600; border-bottom:1px solid var(--border); position:sticky; top:0; white-space:nowrap; }
+td { padding:6px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+tr:hover td { background:rgba(108,142,242,0.05); }
+.badge { display:inline-block; padding:2px 6px; border-radius:3px; font-size:11px; font-weight:500; }
+.badge-warn { background:rgba(232,100,82,0.15); color:var(--red); }
+.badge-ok { background:rgba(90,216,166,0.15); color:var(--green); }
+/* Mobile */
+@media (max-width:768px) {
+    .dashboard { padding:10px; }
+    .header { flex-direction:column; align-items:flex-start; gap:2px; }
+    .header h1 { font-size:18px; }
+    .filter-bar { padding:10px; }
+    .filter-row { flex-direction:column; align-items:flex-start; }
+    .chip-actions { margin-left:0; }
+    .kpi-grid { grid-template-columns:repeat(2,1fr); gap:8px; }
+    .kpi-card { padding:10px; }
+    .kpi-value { font-size:20px; }
+    .kpi-label { font-size:11px; }
+    .row { grid-template-columns:1fr; gap:10px; }
+    .table-scroll table { min-width:580px; font-size:11px; }
+    th,td { padding:4px 6px; }
 }
-/* === Desktop Layout === */
-.dashboard {
-    max-width: 1440px;
-    margin: 0 auto;
-    padding: 24px;
+@media (max-width:480px) {
+    .kpi-value { font-size:16px; }
+    .kpi-card { padding:8px; }
 }
-.header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-}
-.header h1 {
-    font-size: 24px;
-    font-weight: 700;
-    background: linear-gradient(135deg, var(--blue), var(--accent));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-/* === Filter Chips (replaces multi-select) === */
-.filter-bar {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 24px;
-}
-.filter-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-}
-.filter-row:last-child { margin-bottom: 0; }
-.filter-label {
-    color: var(--text-dim);
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-    min-width: 40px;
-}
-.chip-group {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    flex: 1;
-}
-.chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    color: var(--text-dim);
-    transition: all 0.15s;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: manipulation;
-}
-.chip:hover { border-color: var(--accent); color: var(--text); }
-.chip.active {
-    background: var(--accent);
-    border-color: var(--accent);
-    color: #fff;
-}
-.chip .count {
-    font-size: 11px;
-    opacity: 0.6;
-}
-.chip-actions {
-    display: flex;
-    gap: 6px;
-    margin-left: auto;
-}
-.chip-action {
-    padding: 5px 12px;
-    border-radius: 20px;
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-dim);
-    transition: all 0.15s;
-    touch-action: manipulation;
-}
-.chip-action:hover { border-color: var(--accent); color: var(--text); }
-/* === KPI Cards === */
-.kpi-grid {
-    display: grid;
-    gap: 16px;
-    margin-bottom: 24px;
-}
-.kpi-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    transition: transform 0.2s, box-shadow 0.2s;
-}
-.kpi-card:hover { transform: translateY(-2px); box-shadow: 0 4px 20px rgba(0,0,0,0.3); }
-.kpi-label { color: var(--text-dim); font-size: 13px; margin-bottom: 6px; }
-.kpi-value { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
-.kpi-sub { font-size: 12px; margin-top: 6px; }
-.accent .kpi-value { color: var(--accent); }
-.green .kpi-value { color: var(--green); }
-.yellow .kpi-value { color: var(--yellow); }
-.red .kpi-value { color: var(--red); }
-.blue .kpi-value { color: var(--blue); }
-/* === Tabs === */
-.tab-nav-wrap {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin-bottom: 20px;
-    scrollbar-width: none;
-}
-.tab-nav-wrap::-webkit-scrollbar { display: none; }
-.tab-nav {
-    display: inline-flex;
-    gap: 4px;
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 4px;
-    min-width: 100%;
-}
-.tab-btn {
-    flex-shrink: 0;
-    padding: 10px 18px;
-    border: none;
-    background: transparent;
-    color: var(--text-dim);
-    font-size: 14px;
-    font-weight: 500;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-    touch-action: manipulation;
-}
-.tab-btn.active { background: var(--accent); color: #fff; }
-.tab-btn:active:not(.active) { background: rgba(108,142,242,0.2); }
-.tab-content { display: none; }
-.tab-content.active { display: block; }
-/* === Charts === */
-.chart-section {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 16px;
-}
-.chart-section h3 { font-size: 15px; margin-bottom: 16px; color: var(--text-dim); }
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-/* === Tables === */
-.table-scroll {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-}
-.table-scroll table { min-width: 700px; width: 100%; border-collapse: collapse; font-size: 13px; }
-th {
-    text-align: left; padding: 10px 12px; background: var(--bg);
-    color: var(--text-dim); font-weight: 600; border-bottom: 1px solid var(--border);
-    position: sticky; top: 0;
-}
-td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-tr:hover td { background: rgba(108,142,242,0.05); }
-.table-wrap { max-height: 500px; overflow-y: auto; border-radius: 8px; }
-.badge {
-    display: inline-block; padding: 2px 8px; border-radius: 4px;
-    font-size: 12px; font-weight: 500;
-}
-.badge-warn { background: rgba(232,100,82,0.15); color: var(--red); }
-.badge-ok { background: rgba(90,216,166,0.15); color: var(--green); }
-/* === Mobile Optimizations === */
-@media (max-width: 768px) {
-    .dashboard { padding: 12px; }
-    .header { flex-direction: column; align-items: flex-start; gap: 4px; }
-    .header h1 { font-size: 20px; }
-    .filter-bar { padding: 12px; border-radius: 10px; }
-    .filter-row { flex-direction: column; align-items: flex-start; margin-bottom: 8px; }
-    .chip-actions { margin-left: 0; width: 100%; justify-content: flex-start; }
-    .chip { padding: 6px 10px; font-size: 11px; }
-    .kpi-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .kpi-card { padding: 14px; }
-    .kpi-value { font-size: 22px; }
-    .kpi-label { font-size: 11px; }
-    .chart-section { padding: 12px; border-radius: 10px; }
-    .chart-section h3 { font-size: 13px; }
-    .row { grid-template-columns: 1fr; gap: 12px; }
-    .tab-nav-wrap { margin-bottom: 12px; }
-    .tab-btn { padding: 8px 14px; font-size: 13px; }
-    .table-scroll table { min-width: 600px; font-size: 12px; }
-    th, td { padding: 6px 8px; }
-}
-@media (max-width: 480px) {
-    .kpi-card { padding: 10px; }
-    .kpi-value { font-size: 18px; }
-    .kpi-sub { font-size: 10px; }
-    .table-scroll table { min-width: 500px; font-size: 11px; }
-    th, td { padding: 4px 6px; }
-    .chip { padding: 5px 8px; font-size: 10px; }
-}
-/* Desktop KPI: 6 col */
-@media (min-width: 1024px) {
-    .kpi-grid { grid-template-columns: repeat(6, 1fr); }
-}
-/* Tablet KPI: 3 col */
-@media (min-width: 769px) and (max-width: 1023px) {
-    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
-}
+@media (min-width:1024px) { .kpi-grid { grid-template-columns:repeat(7,1fr); } }
+@media (min-width:769px) and (max-width:1023px) { .kpi-grid { grid-template-columns:repeat(4,1fr); } }
 </style>
 </head>
 <body>
 <div class="dashboard">
     <div class="header">
-        <h1>📊 微笑客经营看板</h1>
+        <h1>微笑客经营看板</h1>
         <div class="update-time" id="updateTime"></div>
     </div>
 
     <div class="filter-bar">
         <div class="filter-row">
-            <span class="filter-label">📅 日期</span>
-            <div class="chip-group">
-                <select id="dateFrom" class="chip" style="padding:5px 12px;border-radius:20px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);outline:none;"></select>
-                <span style="color:var(--text-dim);font-size:12px;">~</span>
-                <select id="dateTo" class="chip" style="padding:5px 12px;border-radius:20px;font-size:12px;background:var(--bg);color:var(--text);border:1px solid var(--border);outline:none;"></select>
+            <span class="filter-label">📅</span>
+            <div class="date-quick" id="dateQuick">
+                <button class="date-btn" onclick="setDateRange('yesterday')">昨天</button>
+                <button class="date-btn" onclick="setDateRange('thisWeek')">本周</button>
+                <button class="date-btn" onclick="setDateRange('thisMonth')">本月</button>
+                <button class="date-btn" onclick="setDateRange('lastMonth')">上月</button>
+                <button class="date-btn active" onclick="toggleCalendar()">自定义</button>
+            </div>
+        </div>
+        <div class="calendar-wrap" id="calendarWrap">
+            <div class="cal-header">
+                <span class="cal-nav" onclick="calMonth(-1)">‹</span>
+                <span class="cal-title" id="calTitle"></span>
+                <span class="cal-nav" onclick="calMonth(1)">›</span>
+            </div>
+            <div class="cal-grid" id="calGrid"></div>
+            <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+                <span class="chip-action" id="calRangeLabel" style="font-size:11px;color:var(--accent);"></span>
             </div>
         </div>
         <div class="filter-row">
-            <span class="filter-label">🏪 门店</span>
-            <div class="chip-group" id="storeChips"></div>
+            <span class="filter-label">🏪</span>
+            <div style="flex:1;">
+                <input class="store-search" id="storeSearch" placeholder="搜索门店（编号/名称）" oninput="filterStores()">
+                <div class="chip-group" id="storeChips"></div>
+            </div>
             <div class="chip-actions">
                 <button class="chip-action" onclick="selectAll('stores')">全选</button>
                 <button class="chip-action" onclick="deselectAll('stores')">清空</button>
             </div>
         </div>
         <div class="filter-row">
-            <span class="filter-label">📡 渠道</span>
+            <span class="filter-label">📡</span>
             <div class="chip-group" id="channelChips"></div>
             <div class="chip-actions">
                 <button class="chip-action" onclick="selectAll('channels')">全选</button>
@@ -295,91 +175,205 @@ tr:hover td { background: rgba(108,142,242,0.05); }
     </div>
 
     <div id="tab-store" class="tab-content active">
-        <div class="chart-section">
-            <h3>各门店营收 vs 真实毛利</h3>
-            <div id="chartStoreBar"></div>
-        </div>
-        <div class="chart-section">
-            <h3>门店明细</h3>
-            <div class="table-scroll" id="storeTable"></div>
-        </div>
+        <div class="chart-section"><h3>各门店实收 vs 门店毛利</h3><div id="chartStoreBar"></div></div>
+        <div class="chart-section"><h3>门店明细</h3><div class="table-scroll" id="storeTable"></div></div>
     </div>
-
     <div id="tab-channel" class="tab-content">
         <div class="row">
-            <div class="chart-section">
-                <h3>单量渠道分布</h3>
-                <div id="chartChannelPie"></div>
-            </div>
-            <div class="chart-section">
-                <h3>各渠道毛利率</h3>
-                <div id="chartChannelMargin"></div>
-            </div>
+            <div class="chart-section"><h3>单量渠道分布</h3><div id="chartChannelPie"></div></div>
+            <div class="chart-section"><h3>各渠道毛利率</h3><div id="chartChannelMargin"></div></div>
         </div>
         <div class="row">
-            <div class="chart-section">
-                <h3>各渠道营收</h3>
-                <div id="chartChannelRev"></div>
-            </div>
-            <div class="chart-section">
-                <h3>各渠道真实毛利</h3>
-                <div id="chartChannelProfit"></div>
-            </div>
+            <div class="chart-section"><h3>各渠道实收</h3><div id="chartChannelRev"></div></div>
+            <div class="chart-section"><h3>各渠道抽佣毛利</h3><div id="chartChannelComm"></div></div>
         </div>
-        <div class="chart-section">
-            <h3>渠道明细</h3>
-            <div class="table-scroll" id="channelTable"></div>
-        </div>
+        <div class="chart-section"><h3>渠道明细</h3><div class="table-scroll" id="channelTable"></div></div>
     </div>
-
     <div id="tab-neg" class="tab-content">
-        <div class="chart-section">
-            <h3>门店 × 渠道 负毛利占比热力图</h3>
-            <div id="chartNegHeatmap"></div>
-        </div>
-        <div class="chart-section">
-            <h3>负毛利占比 TOP 门店</h3>
-            <div class="table-scroll" id="negTable"></div>
-        </div>
+        <div class="chart-section"><h3>门店 × 渠道 负毛利占比热力图</h3><div id="chartNegHeatmap"></div></div>
+        <div class="chart-section"><h3>负毛利占比 TOP 门店</h3><div class="table-scroll" id="negTable"></div></div>
     </div>
-
     <div id="tab-promo" class="tab-content">
-        <div class="chart-section">
-            <h3>各门店推广费排名</h3>
-            <div id="chartPromoBar"></div>
-        </div>
-        <div class="chart-section">
-            <h3>渠道推广汇总</h3>
-            <div class="table-scroll" id="promoTable"></div>
-        </div>
+        <div class="chart-section"><h3>各门店推广费排名</h3><div id="chartPromoBar"></div></div>
+        <div class="chart-section"><h3>渠道推广汇总</h3><div class="table-scroll" id="promoTable"></div></div>
     </div>
 </div>
 
 <script>
-const rawData = [{"日期": "2026-05-27", "store_name": "B009-微笑客（广州大源店）", "qn_store_id": 1045634, "channel": "京东到家", "order_cnt": 1, "revenue": 24, "gross_profit": 13, "income": 31, "cost": 11, "goods_cost": 11, "delivery_fee": 3, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 56, "promo_fee": 0, "real_profit": 13, "real_margin_rate": 56}, {"日期": "2026-05-27", "store_name": "B009-微笑客（广州大源店）", "qn_store_id": 1045634, "channel": "美团闪购", "order_cnt": 72, "revenue": 1848, "gross_profit": 390, "income": 1834, "cost": 955, "goods_cost": 1008, "delivery_fee": 381, "commission": 117, "delivery_income": 420, "neg_cnt": 25, "neg_pct": 34, "gross_margin_rate": 21, "promo_fee": 0, "real_profit": 390, "real_margin_rate": 21}, {"日期": "2026-05-27", "store_name": "B009-微笑客（广州大源店）", "qn_store_id": 1045634, "channel": "饿了么", "order_cnt": 55, "revenue": 844, "gross_profit": 90, "income": 1190, "cost": 728, "goods_cost": 740, "delivery_fee": 0, "commission": 380, "delivery_income": 0, "neg_cnt": 12, "neg_pct": 21, "gross_margin_rate": 10, "promo_fee": 29, "real_profit": 60, "real_margin_rate": 7}, {"日期": "2026-05-27", "store_name": "B010-微笑客（东莞樟木头店）", "qn_store_id": 1130415, "channel": "京东到家", "order_cnt": 1, "revenue": 34, "gross_profit": 2, "income": 34, "cost": 25, "goods_cost": 25, "delivery_fee": 5, "commission": 2, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 7, "promo_fee": 0, "real_profit": 2, "real_margin_rate": 7}, {"日期": "2026-05-27", "store_name": "B010-微笑客（东莞樟木头店）", "qn_store_id": 1130415, "channel": "美团闪购", "order_cnt": 65, "revenue": 1636, "gross_profit": 209, "income": 1634, "cost": 1015, "goods_cost": 1103, "delivery_fee": 327, "commission": 90, "delivery_income": 429, "neg_cnt": 15, "neg_pct": 23, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 209, "real_margin_rate": 12}, {"日期": "2026-05-27", "store_name": "B010-微笑客（东莞樟木头店）", "qn_store_id": 1130415, "channel": "饿了么", "order_cnt": 45, "revenue": 836, "gross_profit": 110, "income": 1019, "cost": 670, "goods_cost": 724, "delivery_fee": 0, "commission": 250, "delivery_income": 0, "neg_cnt": 8, "neg_pct": 17, "gross_margin_rate": 13, "promo_fee": 28, "real_profit": 81, "real_margin_rate": 9}, {"日期": "2026-05-27", "store_name": "B020-微笑客（江门乐购一刻）", "qn_store_id": 1069675, "channel": "京东到家", "order_cnt": 1, "revenue": 58, "gross_profit": 23, "income": 66, "cost": 33, "goods_cost": 33, "delivery_fee": 5, "commission": 3, "delivery_income": 13, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 40, "promo_fee": 0, "real_profit": 23, "real_margin_rate": 40}, {"日期": "2026-05-27", "store_name": "B020-微笑客（江门乐购一刻）", "qn_store_id": 1069675, "channel": "美团闪购", "order_cnt": 8, "revenue": 196, "gross_profit": 37, "income": 196, "cost": 94, "goods_cost": 94, "delivery_fee": 54, "commission": 9, "delivery_income": 67, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 19, "promo_fee": 0, "real_profit": 37, "real_margin_rate": 19}, {"日期": "2026-05-27", "store_name": "B020-微笑客（江门乐购一刻）", "qn_store_id": 1069675, "channel": "饿了么", "order_cnt": 13, "revenue": 251, "gross_profit": 55, "income": 353, "cost": 212, "goods_cost": 212, "delivery_fee": 0, "commission": 85, "delivery_income": 69, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 22, "promo_fee": 0, "real_profit": 55, "real_margin_rate": 22}, {"日期": "2026-05-27", "store_name": "B025-微笑客（武汉东风大道店）", "qn_store_id": 1131039, "channel": "京东到家", "order_cnt": 7, "revenue": 263, "gross_profit": 95, "income": 263, "cost": 133, "goods_cost": 133, "delivery_fee": 18, "commission": 15, "delivery_income": 46, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 36, "promo_fee": 0, "real_profit": 95, "real_margin_rate": 36}, {"日期": "2026-05-27", "store_name": "B025-微笑客（武汉东风大道店）", "qn_store_id": 1131039, "channel": "美团闪购", "order_cnt": 49, "revenue": 1252, "gross_profit": 399, "income": 1270, "cost": 705, "goods_cost": 720, "delivery_fee": 102, "commission": 65, "delivery_income": 334, "neg_cnt": 7, "neg_pct": 14, "gross_margin_rate": 31, "promo_fee": 0, "real_profit": 399, "real_margin_rate": 31}, {"日期": "2026-05-27", "store_name": "B025-微笑客（武汉东风大道店）", "qn_store_id": 1131039, "channel": "饿了么", "order_cnt": 7, "revenue": 383, "gross_profit": 109, "income": 384, "cost": 214, "goods_cost": 214, "delivery_fee": 18, "commission": 42, "delivery_income": 20, "neg_cnt": 1, "neg_pct": 14, "gross_margin_rate": 28, "promo_fee": 14, "real_profit": 95, "real_margin_rate": 24}, {"日期": "2026-05-27", "store_name": "B052-微笑客（东莞谢岗店）", "qn_store_id": 1097448, "channel": "美团闪购", "order_cnt": 15, "revenue": 517, "gross_profit": 292, "income": 532, "cost": 90, "goods_cost": 90, "delivery_fee": 122, "commission": 26, "delivery_income": 167, "neg_cnt": 1, "neg_pct": 6, "gross_margin_rate": 56, "promo_fee": 0, "real_profit": 292, "real_margin_rate": 56}, {"日期": "2026-05-27", "store_name": "B052-微笑客（东莞谢岗店）", "qn_store_id": 1097448, "channel": "饿了么", "order_cnt": 1, "revenue": 19, "gross_profit": 3, "income": 22, "cost": 14, "goods_cost": 14, "delivery_fee": 0, "commission": 3, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 3, "real_margin_rate": 17}, {"日期": "2026-05-27", "store_name": "B055-微笑客（广州珠光路店）", "qn_store_id": 1239149, "channel": "京东到家", "order_cnt": 13, "revenue": 387, "gross_profit": 88, "income": 370, "cost": 183, "goods_cost": 191, "delivery_fee": 77, "commission": 22, "delivery_income": 67, "neg_cnt": 1, "neg_pct": 7, "gross_margin_rate": 22, "promo_fee": 0, "real_profit": 88, "real_margin_rate": 22}, {"日期": "2026-05-27", "store_name": "B055-微笑客（广州珠光路店）", "qn_store_id": 1239149, "channel": "美团闪购", "order_cnt": 246, "revenue": 4785, "gross_profit": 565, "income": 4882, "cost": 2757, "goods_cost": 2930, "delivery_fee": 1314, "commission": 260, "delivery_income": 1587, "neg_cnt": 93, "neg_pct": 37, "gross_margin_rate": 11, "promo_fee": 0, "real_profit": 565, "real_margin_rate": 11}, {"日期": "2026-05-27", "store_name": "B055-微笑客（广州珠光路店）", "qn_store_id": 1239149, "channel": "饿了么", "order_cnt": 90, "revenue": 1190, "gross_profit": 73, "income": 1667, "cost": 1083, "goods_cost": 1120, "delivery_fee": 42, "commission": 488, "delivery_income": 12, "neg_cnt": 43, "neg_pct": 47, "gross_margin_rate": 6, "promo_fee": 0, "real_profit": 73, "real_margin_rate": 6}, {"日期": "2026-05-27", "store_name": "B058-微笑客（广州花都店）", "qn_store_id": 1101115, "channel": "京东到家", "order_cnt": 14, "revenue": 471, "gross_profit": 133, "income": 474, "cost": 226, "goods_cost": 226, "delivery_fee": 86, "commission": 27, "delivery_income": 94, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 28, "promo_fee": 0, "real_profit": 133, "real_margin_rate": 28}, {"日期": "2026-05-27", "store_name": "B058-微笑客（广州花都店）", "qn_store_id": 1101115, "channel": "美团闪购", "order_cnt": 181, "revenue": 3387, "gross_profit": 423, "income": 3626, "cost": 1979, "goods_cost": 1993, "delivery_fee": 1040, "commission": 183, "delivery_income": 1197, "neg_cnt": 70, "neg_pct": 38, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 423, "real_margin_rate": 12}, {"日期": "2026-05-27", "store_name": "B058-微笑客（广州花都店）", "qn_store_id": 1101115, "channel": "饿了么", "order_cnt": 117, "revenue": 1732, "gross_profit": 282, "income": 2586, "cost": 1568, "goods_cost": 1568, "delivery_fee": 35, "commission": 699, "delivery_income": 21, "neg_cnt": 21, "neg_pct": 17, "gross_margin_rate": 16, "promo_fee": 60, "real_profit": 222, "real_margin_rate": 12}, {"日期": "2026-05-27", "store_name": "B061-微笑客（东莞惠众百货）", "qn_store_id": 1115375, "channel": "京东到家", "order_cnt": 1, "revenue": 31, "gross_profit": 3, "income": 23, "cost": 16, "goods_cost": 16, "delivery_fee": 0, "commission": 3, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 3, "real_margin_rate": 12}, {"日期": "2026-05-27", "store_name": "B061-微笑客（东莞惠众百货）", "qn_store_id": 1115375, "channel": "饿了么", "order_cnt": 6, "revenue": 152, "gross_profit": 39, "income": 207, "cost": 113, "goods_cost": 113, "delivery_fee": 18, "commission": 36, "delivery_income": 8, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 25, "promo_fee": 8, "real_profit": 31, "real_margin_rate": 20}, {"日期": "2026-05-27", "store_name": "B073-微笑客（韶关沐溪大道店）", "qn_store_id": 1128511, "channel": "京东到家", "order_cnt": 6, "revenue": 213, "gross_profit": 98, "income": 215, "cost": 73, "goods_cost": 73, "delivery_fee": 31, "commission": 12, "delivery_income": 32, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 46, "promo_fee": 0, "real_profit": 98, "real_margin_rate": 46}, {"日期": "2026-05-27", "store_name": "B073-微笑客（韶关沐溪大道店）", "qn_store_id": 1128511, "channel": "美团闪购", "order_cnt": 78, "revenue": 2051, "gross_profit": 491, "income": 1996, "cost": 997, "goods_cost": 1028, "delivery_fee": 407, "commission": 104, "delivery_income": 409, "neg_cnt": 12, "neg_pct": 15, "gross_margin_rate": 23, "promo_fee": 0, "real_profit": 491, "real_margin_rate": 23}, {"日期": "2026-05-27", "store_name": "B073-微笑客（韶关沐溪大道店）", "qn_store_id": 1128511, "channel": "饿了么", "order_cnt": 21, "revenue": 368, "gross_profit": 143, "income": 502, "cost": 234, "goods_cost": 251, "delivery_fee": 0, "commission": 133, "delivery_income": 154, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 39, "promo_fee": 0, "real_profit": 143, "real_margin_rate": 39}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "京东到家", "order_cnt": 10, "revenue": 338, "gross_profit": 66, "income": 246, "cost": 121, "goods_cost": 153, "delivery_fee": 44, "commission": 19, "delivery_income": 75, "neg_cnt": 1, "neg_pct": 10, "gross_margin_rate": 19, "promo_fee": 0, "real_profit": 66, "real_margin_rate": 19}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "客无忧POS", "order_cnt": 10, "revenue": 45, "gross_profit": 14, "income": 45, "cost": 31, "goods_cost": 31, "delivery_fee": 0, "commission": 0, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 32, "promo_fee": 0, "real_profit": 14, "real_margin_rate": 32}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "美团闪购", "order_cnt": 208, "revenue": 3645, "gross_profit": 312, "income": 3740, "cost": 2255, "goods_cost": 2461, "delivery_fee": 997, "commission": 204, "delivery_income": 1377, "neg_cnt": 95, "neg_pct": 45, "gross_margin_rate": 8, "promo_fee": 150, "real_profit": 162, "real_margin_rate": 4}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "饿了么", "order_cnt": 64, "revenue": 961, "gross_profit": 30, "income": 1306, "cost": 819, "goods_cost": 819, "delivery_fee": 0, "commission": 456, "delivery_income": 0, "neg_cnt": 40, "neg_pct": 62, "gross_margin_rate": 3, "promo_fee": 13, "real_profit": 17, "real_margin_rate": 1}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "京东到家", "order_cnt": 2, "revenue": 58, "gross_profit": 7, "income": 58, "cost": 37, "goods_cost": 37, "delivery_fee": 11, "commission": 3, "delivery_income": 11, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 7, "real_margin_rate": 12}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "客无忧POS", "order_cnt": 243, "revenue": 2421, "gross_profit": 811, "income": 2421, "cost": 1609, "goods_cost": 1609, "delivery_fee": 0, "commission": 0, "delivery_income": 0, "neg_cnt": 2, "neg_pct": 0, "gross_margin_rate": 33, "promo_fee": 0, "real_profit": 811, "real_margin_rate": 33}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "美团闪购", "order_cnt": 195, "revenue": 4009, "gross_profit": 710, "income": 4252, "cost": 2390, "goods_cost": 2520, "delivery_fee": 941, "commission": 225, "delivery_income": 1362, "neg_cnt": 66, "neg_pct": 33, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 710, "real_margin_rate": 17}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "饿了么", "order_cnt": 68, "revenue": 1327, "gross_profit": 262, "income": 1702, "cost": 1048, "goods_cost": 1086, "delivery_fee": 0, "commission": 404, "delivery_income": 0, "neg_cnt": 5, "neg_pct": 7, "gross_margin_rate": 19, "promo_fee": 50, "real_profit": 212, "real_margin_rate": 16}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "京东到家", "order_cnt": 3, "revenue": 83, "gross_profit": 12, "income": 83, "cost": 49, "goods_cost": 49, "delivery_fee": 16, "commission": 4, "delivery_income": 16, "neg_cnt": 1, "neg_pct": 33, "gross_margin_rate": 15, "promo_fee": 0, "real_profit": 12, "real_margin_rate": 15}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "美团闪购", "order_cnt": 93, "revenue": 1886, "gross_profit": 223, "income": 1921, "cost": 1091, "goods_cost": 1145, "delivery_fee": 517, "commission": 101, "delivery_income": 591, "neg_cnt": 33, "neg_pct": 35, "gross_margin_rate": 11, "promo_fee": 100, "real_profit": 123, "real_margin_rate": 6}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "饿了么", "order_cnt": 71, "revenue": 1255, "gross_profit": 165, "income": 1664, "cost": 1059, "goods_cost": 1109, "delivery_fee": 0, "commission": 453, "delivery_income": 0, "neg_cnt": 15, "neg_pct": 21, "gross_margin_rate": 13, "promo_fee": 44, "real_profit": 121, "real_margin_rate": 9}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "京东到家", "order_cnt": 3, "revenue": 127, "gross_profit": 26, "income": 127, "cost": 74, "goods_cost": 74, "delivery_fee": 19, "commission": 7, "delivery_income": 26, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 20, "promo_fee": 0, "real_profit": 26, "real_margin_rate": 20}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "客无忧POS", "order_cnt": 115, "revenue": 2405, "gross_profit": 1196, "income": 2405, "cost": 1208, "goods_cost": 1208, "delivery_fee": 0, "commission": 0, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 49, "promo_fee": 0, "real_profit": 1196, "real_margin_rate": 49}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "美团闪购", "order_cnt": 13, "revenue": 295, "gross_profit": 40, "income": 299, "cost": 170, "goods_cost": 170, "delivery_fee": 73, "commission": 15, "delivery_income": 90, "neg_cnt": 2, "neg_pct": 15, "gross_margin_rate": 13, "promo_fee": 0, "real_profit": 40, "real_margin_rate": 13}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "饿了么", "order_cnt": 5, "revenue": 134, "gross_profit": 59, "income": 185, "cost": 91, "goods_cost": 91, "delivery_fee": 0, "commission": 34, "delivery_income": 46, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 43, "promo_fee": 0, "real_profit": 58, "real_margin_rate": 43}, {"日期": "2026-05-27", "store_name": "B085-微笑客（慕臣便利阳逻店）", "qn_store_id": 1180055, "channel": "饿了么", "order_cnt": 5, "revenue": 155, "gross_profit": 103, "income": 188, "cost": 54, "goods_cost": 54, "delivery_fee": 0, "commission": 30, "delivery_income": 25, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 66, "promo_fee": 13, "real_profit": 90, "real_margin_rate": 58}, {"日期": "2026-05-27", "store_name": "B086-微笑客（东莞康乐店）", "qn_store_id": 1193469, "channel": "京东到家", "order_cnt": 1, "revenue": 30, "gross_profit": 12, "income": 30, "cost": 12, "goods_cost": 12, "delivery_fee": 3, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 41, "promo_fee": 0, "real_profit": 12, "real_margin_rate": 41}, {"日期": "2026-05-27", "store_name": "B086-微笑客（东莞康乐店）", "qn_store_id": 1193469, "channel": "美团闪购", "order_cnt": 177, "revenue": 3348, "gross_profit": 507, "income": 3593, "cost": 2092, "goods_cost": 2187, "delivery_fee": 824, "commission": 188, "delivery_income": 1218, "neg_cnt": 73, "neg_pct": 41, "gross_margin_rate": 15, "promo_fee": 0, "real_profit": 507, "real_margin_rate": 15}, {"日期": "2026-05-27", "store_name": "B086-微笑客（东莞康乐店）", "qn_store_id": 1193469, "channel": "饿了么", "order_cnt": 98, "revenue": 1547, "gross_profit": 224, "income": 2136, "cost": 1376, "goods_cost": 1376, "delivery_fee": 0, "commission": 535, "delivery_income": 0, "neg_cnt": 23, "neg_pct": 23, "gross_margin_rate": 14, "promo_fee": 61, "real_profit": 163, "real_margin_rate": 10}, {"日期": "2026-05-27", "store_name": "B087-微笑客（东莞黄江店）", "qn_store_id": 1208667, "channel": "京东到家", "order_cnt": 3, "revenue": 101, "gross_profit": 31, "income": 101, "cost": 49, "goods_cost": 49, "delivery_fee": 15, "commission": 5, "delivery_income": 19, "neg_cnt": 1, "neg_pct": 33, "gross_margin_rate": 30, "promo_fee": 0, "real_profit": 31, "real_margin_rate": 30}, {"日期": "2026-05-27", "store_name": "B087-微笑客（东莞黄江店）", "qn_store_id": 1208667, "channel": "美团闪购", "order_cnt": 77, "revenue": 1555, "gross_profit": 268, "income": 1620, "cost": 926, "goods_cost": 990, "delivery_fee": 346, "commission": 87, "delivery_income": 537, "neg_cnt": 21, "neg_pct": 27, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 268, "real_margin_rate": 17}, {"日期": "2026-05-27", "store_name": "B087-微笑客（东莞黄江店）", "qn_store_id": 1208667, "channel": "饿了么", "order_cnt": 73, "revenue": 1141, "gross_profit": 166, "income": 1570, "cost": 985, "goods_cost": 1007, "delivery_fee": 0, "commission": 432, "delivery_income": 0, "neg_cnt": 19, "neg_pct": 26, "gross_margin_rate": 14, "promo_fee": 56, "real_profit": 109, "real_margin_rate": 9}, {"日期": "2026-05-27", "store_name": "B088-微笑客（禅城祖庙店）", "qn_store_id": 1225366, "channel": "京东到家", "order_cnt": 1, "revenue": 18, "gross_profit": 1, "income": 18, "cost": 10, "goods_cost": 10, "delivery_fee": 4, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 8, "promo_fee": 0, "real_profit": 1, "real_margin_rate": 8}, {"日期": "2026-05-27", "store_name": "B088-微笑客（禅城祖庙店）", "qn_store_id": 1225366, "channel": "美团闪购", "order_cnt": 162, "revenue": 2991, "gross_profit": 329, "income": 3177, "cost": 1892, "goods_cost": 2007, "delivery_fee": 806, "commission": 168, "delivery_income": 1087, "neg_cnt": 61, "neg_pct": 37, "gross_margin_rate": 11, "promo_fee": 0, "real_profit": 329, "real_margin_rate": 11}, {"日期": "2026-05-27", "store_name": "B088-微笑客（禅城祖庙店）", "qn_store_id": 1225366, "channel": "饿了么", "order_cnt": 64, "revenue": 1282, "gross_profit": 144, "income": 1668, "cost": 1098, "goods_cost": 1098, "delivery_fee": 0, "commission": 424, "delivery_income": 0, "neg_cnt": 15, "neg_pct": 23, "gross_margin_rate": 11, "promo_fee": 43, "real_profit": 101, "real_margin_rate": 7}, {"日期": "2026-05-27", "store_name": "B089-微笑客（东莞高田坊店）", "qn_store_id": 1232337, "channel": "京东到家", "order_cnt": 1, "revenue": 28, "gross_profit": 6, "income": 28, "cost": 13, "goods_cost": 13, "delivery_fee": 6, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 24, "promo_fee": 0, "real_profit": 6, "real_margin_rate": 24}, {"日期": "2026-05-27", "store_name": "B089-微笑客（东莞高田坊店）", "qn_store_id": 1232337, "channel": "美团闪购", "order_cnt": 37, "revenue": 777, "gross_profit": 142, "income": 829, "cost": 426, "goods_cost": 438, "delivery_fee": 218, "commission": 42, "delivery_income": 305, "neg_cnt": 8, "neg_pct": 21, "gross_margin_rate": 18, "promo_fee": 0, "real_profit": 142, "real_margin_rate": 18}, {"日期": "2026-05-27", "store_name": "B089-微笑客（东莞高田坊店）", "qn_store_id": 1232337, "channel": "饿了么", "order_cnt": 49, "revenue": 496, "gross_profit": 22, "income": 832, "cost": 536, "goods_cost": 536, "delivery_fee": 0, "commission": 273, "delivery_income": 0, "neg_cnt": 25, "neg_pct": 51, "gross_margin_rate": 4, "promo_fee": 1, "real_profit": 21, "real_margin_rate": 4}, {"日期": "2026-05-27", "store_name": "B090-微笑客（东莞世和路店）", "qn_store_id": 1243753, "channel": "京东到家", "order_cnt": 4, "revenue": 211, "gross_profit": 47, "income": 153, "cost": 78, "goods_cost": 108, "delivery_fee": 18, "commission": 12, "delivery_income": 36, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 22, "promo_fee": 0, "real_profit": 47, "real_margin_rate": 22}, {"日期": "2026-05-27", "store_name": "B090-微笑客（东莞世和路店）", "qn_store_id": 1243753, "channel": "美团闪购", "order_cnt": 104, "revenue": 1816, "gross_profit": 205, "income": 1971, "cost": 1125, "goods_cost": 1172, "delivery_fee": 546, "commission": 103, "delivery_income": 766, "neg_cnt": 31, "neg_pct": 29, "gross_margin_rate": 11, "promo_fee": 0, "real_profit": 205, "real_margin_rate": 11}, {"日期": "2026-05-27", "store_name": "B090-微笑客（东莞世和路店）", "qn_store_id": 1243753, "channel": "饿了么", "order_cnt": 49, "revenue": 743, "gross_profit": 74, "income": 970, "cost": 614, "goods_cost": 651, "delivery_fee": 0, "commission": 293, "delivery_income": 0, "neg_cnt": 15, "neg_pct": 30, "gross_margin_rate": 10, "promo_fee": 0, "real_profit": 74, "real_margin_rate": 10}, {"日期": "2026-05-27", "store_name": "Q019-微笑客（博罗中园路店）", "qn_store_id": 1160538, "channel": "京东到家", "order_cnt": 13, "revenue": 523, "gross_profit": 148, "income": 528, "cost": 279, "goods_cost": 279, "delivery_fee": 69, "commission": 30, "delivery_income": 82, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 28, "promo_fee": 0, "real_profit": 148, "real_margin_rate": 28}, {"日期": "2026-05-27", "store_name": "Q019-微笑客（博罗中园路店）", "qn_store_id": 1160538, "channel": "美团闪购", "order_cnt": 199, "revenue": 3379, "gross_profit": 613, "income": 3847, "cost": 2264, "goods_cost": 2320, "delivery_fee": 776, "commission": 198, "delivery_income": 1383, "neg_cnt": 50, "neg_pct": 25, "gross_margin_rate": 18, "promo_fee": 0, "real_profit": 613, "real_margin_rate": 18}, {"日期": "2026-05-27", "store_name": "Q019-微笑客（博罗中园路店）", "qn_store_id": 1160538, "channel": "饿了么", "order_cnt": 141, "revenue": 2342, "gross_profit": 535, "income": 3432, "cost": 1877, "goods_cost": 1885, "delivery_fee": 38, "commission": 990, "delivery_income": 836, "neg_cnt": 22, "neg_pct": 15, "gross_margin_rate": 22, "promo_fee": 64, "real_profit": 470, "real_margin_rate": 20}, {"日期": "2026-05-27", "store_name": "Q028-微笑客（宣汉杨家湾店）", "qn_store_id": 1150787, "channel": "京东到家", "order_cnt": 3, "revenue": 169, "gross_profit": 57, "income": 169, "cost": 87, "goods_cost": 87, "delivery_fee": 14, "commission": 10, "delivery_income": 15, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 34, "promo_fee": 0, "real_profit": 57, "real_margin_rate": 34}, {"日期": "2026-05-27", "store_name": "Q028-微笑客（宣汉杨家湾店）", "qn_store_id": 1150787, "channel": "美团闪购", "order_cnt": 64, "revenue": 1687, "gross_profit": 465, "income": 1686, "cost": 891, "goods_cost": 930, "delivery_fee": 244, "commission": 90, "delivery_income": 346, "neg_cnt": 5, "neg_pct": 7, "gross_margin_rate": 27, "promo_fee": 25, "real_profit": 440, "real_margin_rate": 26}, {"日期": "2026-05-27", "store_name": "Q028-微笑客（宣汉杨家湾店）", "qn_store_id": 1150787, "channel": "饿了么", "order_cnt": 6, "revenue": 126, "gross_profit": 26, "income": 155, "cost": 84, "goods_cost": 84, "delivery_fee": 0, "commission": 44, "delivery_income": 32, "neg_cnt": 1, "neg_pct": 16, "gross_margin_rate": 20, "promo_fee": 0, "real_profit": 26, "real_margin_rate": 20}, {"日期": "2026-05-27", "store_name": "Q076-微笑客（衡阳银杏路店）", "qn_store_id": 1139168, "channel": "美团闪购", "order_cnt": 112, "revenue": 1604, "gross_profit": -32, "income": 1741, "cost": 1121, "goods_cost": 1163, "delivery_fee": 563, "commission": 91, "delivery_income": 681, "neg_cnt": 55, "neg_pct": 49, "gross_margin_rate": -2, "promo_fee": 0, "real_profit": -32, "real_margin_rate": -2}, {"日期": "2026-05-27", "store_name": "Q076-微笑客（衡阳银杏路店）", "qn_store_id": 1139168, "channel": "饿了么", "order_cnt": 65, "revenue": 694, "gross_profit": -17, "income": 1012, "cost": 645, "goods_cost": 658, "delivery_fee": 0, "commission": 390, "delivery_income": 347, "neg_cnt": 43, "neg_pct": 66, "gross_margin_rate": -2, "promo_fee": 44, "real_profit": -62, "real_margin_rate": -9}, {"日期": "2026-05-27", "store_name": "Q077-微笑客（贵港石羊塘中路店）", "qn_store_id": 1239115, "channel": "京东到家", "order_cnt": 1, "revenue": 58, "gross_profit": 0, "income": 0, "cost": 0, "goods_cost": 31, "delivery_fee": 0, "commission": 3, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 0, "promo_fee": 0, "real_profit": 0, "real_margin_rate": 0}, {"日期": "2026-05-27", "store_name": "Q077-微笑客（贵港石羊塘中路店）", "qn_store_id": 1239115, "channel": "美团闪购", "order_cnt": 131, "revenue": 2971, "gross_profit": 512, "income": 3074, "cost": 1874, "goods_cost": 1887, "delivery_fee": 534, "commission": 154, "delivery_income": 910, "neg_cnt": 36, "neg_pct": 27, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 512, "real_margin_rate": 17}, {"日期": "2026-05-27", "store_name": "Q077-微笑客（贵港石羊塘中路店）", "qn_store_id": 1239115, "channel": "饿了么", "order_cnt": 41, "revenue": 926, "gross_profit": 245, "income": 1299, "cost": 770, "goods_cost": 770, "delivery_fee": 0, "commission": 282, "delivery_income": 261, "neg_cnt": 6, "neg_pct": 14, "gross_margin_rate": 26, "promo_fee": 46, "real_profit": 199, "real_margin_rate": 21}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "京东到家", "order_cnt": 2, "revenue": 52, "gross_profit": 10, "income": 52, "cost": 30, "goods_cost": 30, "delivery_fee": 7, "commission": 3, "delivery_income": 10, "neg_cnt": 0, "neg_pct": 0, "gross_margin_rate": 20, "promo_fee": 0, "real_profit": 10, "real_margin_rate": 20}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "美团闪购", "order_cnt": 105, "revenue": 2210, "gross_profit": 464, "income": 2355, "cost": 1335, "goods_cost": 1368, "delivery_fee": 437, "commission": 120, "delivery_income": 583, "neg_cnt": 24, "neg_pct": 22, "gross_margin_rate": 21, "promo_fee": 150, "real_profit": 314, "real_margin_rate": 14}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "饿了么", "order_cnt": 106, "revenue": 1437, "gross_profit": 188, "income": 2058, "cost": 1313, "goods_cost": 1411, "delivery_fee": 14, "commission": 559, "delivery_income": 94, "neg_cnt": 33, "neg_pct": 31, "gross_margin_rate": 13, "promo_fee": 44, "real_profit": 144, "real_margin_rate": 10}];
+// ============ DATA ============
+const rawData = [{"日期": "2026-05-27", "store_name": "B009-微笑客（广州大源店）", "qn_store_id": 1045634, "channel": "京东到家", "order_cnt": 1, "revenue": 24, "gross_profit": 13, "income": 31, "cost": 11, "goods_cost": 11, "delivery_fee": 3, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 1, "avg_delivery_cost": 3, "gross_margin_rate": 56, "promo_fee": 0, "real_profit": 13, "real_margin_rate": 56, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B009-微笑客（广州大源店）", "qn_store_id": 1045634, "channel": "美团闪购", "order_cnt": 72, "revenue": 1848, "gross_profit": 390, "income": 1834, "cost": 955, "goods_cost": 1008, "delivery_fee": 381, "commission": 117, "delivery_income": 420, "neg_cnt": 25, "neg_pct": 34, "delivery_order_cnt": 68, "avg_delivery_cost": 5, "gross_margin_rate": 21, "promo_fee": 0, "real_profit": 390, "real_margin_rate": 21, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B009-微笑客（广州大源店）", "qn_store_id": 1045634, "channel": "饿了么", "order_cnt": 55, "revenue": 844, "gross_profit": 90, "income": 1190, "cost": 728, "goods_cost": 740, "delivery_fee": 0, "commission": 380, "delivery_income": 0, "neg_cnt": 12, "neg_pct": 21, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 10, "promo_fee": 29, "real_profit": 60, "real_margin_rate": 7, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B010-微笑客（东莞樟木头店）", "qn_store_id": 1130415, "channel": "京东到家", "order_cnt": 1, "revenue": 34, "gross_profit": 2, "income": 34, "cost": 25, "goods_cost": 25, "delivery_fee": 5, "commission": 2, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 1, "avg_delivery_cost": 5, "gross_margin_rate": 7, "promo_fee": 0, "real_profit": 2, "real_margin_rate": 7, "commission_rate": 0, "commission_cost": 0, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B010-微笑客（东莞樟木头店）", "qn_store_id": 1130415, "channel": "美团闪购", "order_cnt": 65, "revenue": 1636, "gross_profit": 209, "income": 1634, "cost": 1015, "goods_cost": 1103, "delivery_fee": 327, "commission": 90, "delivery_income": 429, "neg_cnt": 15, "neg_pct": 23, "delivery_order_cnt": 55, "avg_delivery_cost": 5, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 209, "real_margin_rate": 12, "commission_rate": 0, "commission_cost": 32, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B010-微笑客（东莞樟木头店）", "qn_store_id": 1130415, "channel": "饿了么", "order_cnt": 45, "revenue": 836, "gross_profit": 110, "income": 1019, "cost": 670, "goods_cost": 724, "delivery_fee": 0, "commission": 250, "delivery_income": 0, "neg_cnt": 8, "neg_pct": 17, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 13, "promo_fee": 28, "real_profit": 81, "real_margin_rate": 9, "commission_rate": 0, "commission_cost": 16, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B020-微笑客（江门乐购一刻）", "qn_store_id": 1069675, "channel": "京东到家", "order_cnt": 1, "revenue": 58, "gross_profit": 23, "income": 66, "cost": 33, "goods_cost": 33, "delivery_fee": 5, "commission": 3, "delivery_income": 13, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 1, "avg_delivery_cost": 5, "gross_margin_rate": 40, "promo_fee": 0, "real_profit": 23, "real_margin_rate": 40, "commission_rate": 0, "commission_cost": 1, "commission_margin": 1}, {"日期": "2026-05-27", "store_name": "B020-微笑客（江门乐购一刻）", "qn_store_id": 1069675, "channel": "美团闪购", "order_cnt": 8, "revenue": 196, "gross_profit": 37, "income": 196, "cost": 94, "goods_cost": 94, "delivery_fee": 54, "commission": 9, "delivery_income": 67, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 8, "avg_delivery_cost": 6, "gross_margin_rate": 19, "promo_fee": 0, "real_profit": 37, "real_margin_rate": 19, "commission_rate": 0, "commission_cost": 3, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B020-微笑客（江门乐购一刻）", "qn_store_id": 1069675, "channel": "饿了么", "order_cnt": 13, "revenue": 251, "gross_profit": 55, "income": 353, "cost": 212, "goods_cost": 212, "delivery_fee": 0, "commission": 85, "delivery_income": 69, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 22, "promo_fee": 0, "real_profit": 55, "real_margin_rate": 22, "commission_rate": 0, "commission_cost": 5, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B025-微笑客（武汉东风大道店）", "qn_store_id": 1131039, "channel": "京东到家", "order_cnt": 7, "revenue": 263, "gross_profit": 95, "income": 263, "cost": 133, "goods_cost": 133, "delivery_fee": 18, "commission": 15, "delivery_income": 46, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 2, "avg_delivery_cost": 9, "gross_margin_rate": 36, "promo_fee": 0, "real_profit": 95, "real_margin_rate": 36, "commission_rate": 0, "commission_cost": 5, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B025-微笑客（武汉东风大道店）", "qn_store_id": 1131039, "channel": "美团闪购", "order_cnt": 49, "revenue": 1252, "gross_profit": 399, "income": 1270, "cost": 705, "goods_cost": 720, "delivery_fee": 102, "commission": 65, "delivery_income": 334, "neg_cnt": 7, "neg_pct": 14, "delivery_order_cnt": 11, "avg_delivery_cost": 9, "gross_margin_rate": 31, "promo_fee": 0, "real_profit": 399, "real_margin_rate": 31, "commission_rate": 0, "commission_cost": 25, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B025-微笑客（武汉东风大道店）", "qn_store_id": 1131039, "channel": "饿了么", "order_cnt": 7, "revenue": 383, "gross_profit": 109, "income": 384, "cost": 214, "goods_cost": 214, "delivery_fee": 18, "commission": 42, "delivery_income": 20, "neg_cnt": 1, "neg_pct": 14, "delivery_order_cnt": 1, "avg_delivery_cost": 18, "gross_margin_rate": 28, "promo_fee": 14, "real_profit": 95, "real_margin_rate": 24, "commission_rate": 0, "commission_cost": 7, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B052-微笑客（东莞谢岗店）", "qn_store_id": 1097448, "channel": "美团闪购", "order_cnt": 15, "revenue": 517, "gross_profit": 292, "income": 532, "cost": 90, "goods_cost": 90, "delivery_fee": 122, "commission": 26, "delivery_income": 167, "neg_cnt": 1, "neg_pct": 6, "delivery_order_cnt": 15, "avg_delivery_cost": 8, "gross_margin_rate": 56, "promo_fee": 0, "real_profit": 292, "real_margin_rate": 56, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B052-微笑客（东莞谢岗店）", "qn_store_id": 1097448, "channel": "饿了么", "order_cnt": 1, "revenue": 19, "gross_profit": 3, "income": 22, "cost": 14, "goods_cost": 14, "delivery_fee": 0, "commission": 3, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 3, "real_margin_rate": 17, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B055-微笑客（广州珠光路店）", "qn_store_id": 1239149, "channel": "京东到家", "order_cnt": 13, "revenue": 387, "gross_profit": 88, "income": 370, "cost": 183, "goods_cost": 191, "delivery_fee": 77, "commission": 22, "delivery_income": 67, "neg_cnt": 1, "neg_pct": 7, "delivery_order_cnt": 12, "avg_delivery_cost": 6, "gross_margin_rate": 22, "promo_fee": 0, "real_profit": 88, "real_margin_rate": 22, "commission_rate": 0, "commission_cost": 11, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B055-微笑客（广州珠光路店）", "qn_store_id": 1239149, "channel": "美团闪购", "order_cnt": 246, "revenue": 4785, "gross_profit": 565, "income": 4882, "cost": 2757, "goods_cost": 2930, "delivery_fee": 1314, "commission": 260, "delivery_income": 1587, "neg_cnt": 93, "neg_pct": 37, "delivery_order_cnt": 232, "avg_delivery_cost": 5, "gross_margin_rate": 11, "promo_fee": 0, "real_profit": 565, "real_margin_rate": 11, "commission_rate": 0, "commission_cost": 143, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B055-微笑客（广州珠光路店）", "qn_store_id": 1239149, "channel": "饿了么", "order_cnt": 90, "revenue": 1190, "gross_profit": 73, "income": 1667, "cost": 1083, "goods_cost": 1120, "delivery_fee": 42, "commission": 488, "delivery_income": 12, "neg_cnt": 43, "neg_pct": 47, "delivery_order_cnt": 5, "avg_delivery_cost": 8, "gross_margin_rate": 6, "promo_fee": 0, "real_profit": 73, "real_margin_rate": 6, "commission_rate": 0, "commission_cost": 35, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B058-微笑客（广州花都店）", "qn_store_id": 1101115, "channel": "京东到家", "order_cnt": 14, "revenue": 471, "gross_profit": 133, "income": 474, "cost": 226, "goods_cost": 226, "delivery_fee": 86, "commission": 27, "delivery_income": 94, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 14, "avg_delivery_cost": 6, "gross_margin_rate": 28, "promo_fee": 0, "real_profit": 133, "real_margin_rate": 28, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B058-微笑客（广州花都店）", "qn_store_id": 1101115, "channel": "美团闪购", "order_cnt": 181, "revenue": 3387, "gross_profit": 423, "income": 3626, "cost": 1979, "goods_cost": 1993, "delivery_fee": 1040, "commission": 183, "delivery_income": 1197, "neg_cnt": 70, "neg_pct": 38, "delivery_order_cnt": 179, "avg_delivery_cost": 5, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 423, "real_margin_rate": 12, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B058-微笑客（广州花都店）", "qn_store_id": 1101115, "channel": "饿了么", "order_cnt": 117, "revenue": 1732, "gross_profit": 282, "income": 2586, "cost": 1568, "goods_cost": 1568, "delivery_fee": 35, "commission": 699, "delivery_income": 21, "neg_cnt": 21, "neg_pct": 17, "delivery_order_cnt": 4, "avg_delivery_cost": 8, "gross_margin_rate": 16, "promo_fee": 60, "real_profit": 222, "real_margin_rate": 12, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B061-微笑客（东莞惠众百货）", "qn_store_id": 1115375, "channel": "京东到家", "order_cnt": 1, "revenue": 31, "gross_profit": 3, "income": 23, "cost": 16, "goods_cost": 16, "delivery_fee": 0, "commission": 3, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 3, "real_margin_rate": 12, "commission_rate": 0, "commission_cost": 0, "commission_margin": 1}, {"日期": "2026-05-27", "store_name": "B061-微笑客（东莞惠众百货）", "qn_store_id": 1115375, "channel": "饿了么", "order_cnt": 6, "revenue": 152, "gross_profit": 39, "income": 207, "cost": 113, "goods_cost": 113, "delivery_fee": 18, "commission": 36, "delivery_income": 8, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 2, "avg_delivery_cost": 9, "gross_margin_rate": 25, "promo_fee": 8, "real_profit": 31, "real_margin_rate": 20, "commission_rate": 0, "commission_cost": 3, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B073-微笑客（韶关沐溪大道店）", "qn_store_id": 1128511, "channel": "京东到家", "order_cnt": 6, "revenue": 213, "gross_profit": 98, "income": 215, "cost": 73, "goods_cost": 73, "delivery_fee": 31, "commission": 12, "delivery_income": 32, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 6, "avg_delivery_cost": 5, "gross_margin_rate": 46, "promo_fee": 0, "real_profit": 98, "real_margin_rate": 46, "commission_rate": 0, "commission_cost": 4, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B073-微笑客（韶关沐溪大道店）", "qn_store_id": 1128511, "channel": "美团闪购", "order_cnt": 78, "revenue": 2051, "gross_profit": 491, "income": 1996, "cost": 997, "goods_cost": 1028, "delivery_fee": 407, "commission": 104, "delivery_income": 409, "neg_cnt": 12, "neg_pct": 15, "delivery_order_cnt": 75, "avg_delivery_cost": 5, "gross_margin_rate": 23, "promo_fee": 0, "real_profit": 491, "real_margin_rate": 23, "commission_rate": 0, "commission_cost": 41, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B073-微笑客（韶关沐溪大道店）", "qn_store_id": 1128511, "channel": "饿了么", "order_cnt": 21, "revenue": 368, "gross_profit": 143, "income": 502, "cost": 234, "goods_cost": 251, "delivery_fee": 0, "commission": 133, "delivery_income": 154, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 39, "promo_fee": 0, "real_profit": 143, "real_margin_rate": 39, "commission_rate": 0, "commission_cost": 7, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "京东到家", "order_cnt": 10, "revenue": 338, "gross_profit": 66, "income": 246, "cost": 121, "goods_cost": 153, "delivery_fee": 44, "commission": 19, "delivery_income": 75, "neg_cnt": 1, "neg_pct": 10, "delivery_order_cnt": 7, "avg_delivery_cost": 6, "gross_margin_rate": 19, "promo_fee": 0, "real_profit": 66, "real_margin_rate": 19, "commission_rate": 0, "commission_cost": 10, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "客无忧POS", "order_cnt": 10, "revenue": 45, "gross_profit": 14, "income": 45, "cost": 31, "goods_cost": 31, "delivery_fee": 0, "commission": 0, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 32, "promo_fee": 0, "real_profit": 14, "real_margin_rate": 32, "commission_rate": 0, "commission_cost": 1, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "美团闪购", "order_cnt": 208, "revenue": 3645, "gross_profit": 312, "income": 3740, "cost": 2255, "goods_cost": 2461, "delivery_fee": 997, "commission": 204, "delivery_income": 1377, "neg_cnt": 95, "neg_pct": 45, "delivery_order_cnt": 190, "avg_delivery_cost": 5, "gross_margin_rate": 8, "promo_fee": 150, "real_profit": 162, "real_margin_rate": 4, "commission_rate": 0, "commission_cost": 109, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "饿了么", "order_cnt": 64, "revenue": 961, "gross_profit": 30, "income": 1306, "cost": 819, "goods_cost": 819, "delivery_fee": 0, "commission": 456, "delivery_income": 0, "neg_cnt": 40, "neg_pct": 62, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 3, "promo_fee": 13, "real_profit": 17, "real_margin_rate": 1, "commission_rate": 0, "commission_cost": 28, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "京东到家", "order_cnt": 2, "revenue": 58, "gross_profit": 7, "income": 58, "cost": 37, "goods_cost": 37, "delivery_fee": 11, "commission": 3, "delivery_income": 11, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 2, "avg_delivery_cost": 5, "gross_margin_rate": 12, "promo_fee": 0, "real_profit": 7, "real_margin_rate": 12, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "客无忧POS", "order_cnt": 243, "revenue": 2421, "gross_profit": 811, "income": 2421, "cost": 1609, "goods_cost": 1609, "delivery_fee": 0, "commission": 0, "delivery_income": 0, "neg_cnt": 2, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 33, "promo_fee": 0, "real_profit": 811, "real_margin_rate": 33, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "美团闪购", "order_cnt": 195, "revenue": 4009, "gross_profit": 710, "income": 4252, "cost": 2390, "goods_cost": 2520, "delivery_fee": 941, "commission": 225, "delivery_income": 1362, "neg_cnt": 66, "neg_pct": 33, "delivery_order_cnt": 187, "avg_delivery_cost": 5, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 710, "real_margin_rate": 17, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "饿了么", "order_cnt": 68, "revenue": 1327, "gross_profit": 262, "income": 1702, "cost": 1048, "goods_cost": 1086, "delivery_fee": 0, "commission": 404, "delivery_income": 0, "neg_cnt": 5, "neg_pct": 7, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 19, "promo_fee": 50, "real_profit": 212, "real_margin_rate": 16, "commission_rate": 0, "commission_cost": 0, "commission_margin": 0}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "京东到家", "order_cnt": 3, "revenue": 83, "gross_profit": 12, "income": 83, "cost": 49, "goods_cost": 49, "delivery_fee": 16, "commission": 4, "delivery_income": 16, "neg_cnt": 1, "neg_pct": 33, "delivery_order_cnt": 3, "avg_delivery_cost": 5, "gross_margin_rate": 15, "promo_fee": 0, "real_profit": 12, "real_margin_rate": 15, "commission_rate": 0, "commission_cost": 1, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "美团闪购", "order_cnt": 93, "revenue": 1886, "gross_profit": 223, "income": 1921, "cost": 1091, "goods_cost": 1145, "delivery_fee": 517, "commission": 101, "delivery_income": 591, "neg_cnt": 33, "neg_pct": 35, "delivery_order_cnt": 89, "avg_delivery_cost": 5, "gross_margin_rate": 11, "promo_fee": 100, "real_profit": 123, "real_margin_rate": 6, "commission_rate": 0, "commission_cost": 37, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "饿了么", "order_cnt": 71, "revenue": 1255, "gross_profit": 165, "income": 1664, "cost": 1059, "goods_cost": 1109, "delivery_fee": 0, "commission": 453, "delivery_income": 0, "neg_cnt": 15, "neg_pct": 21, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 13, "promo_fee": 44, "real_profit": 121, "real_margin_rate": 9, "commission_rate": 0, "commission_cost": 25, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "京东到家", "order_cnt": 3, "revenue": 127, "gross_profit": 26, "income": 127, "cost": 74, "goods_cost": 74, "delivery_fee": 19, "commission": 7, "delivery_income": 26, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 3, "avg_delivery_cost": 6, "gross_margin_rate": 20, "promo_fee": 0, "real_profit": 26, "real_margin_rate": 20, "commission_rate": 0, "commission_cost": 2, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "客无忧POS", "order_cnt": 115, "revenue": 2405, "gross_profit": 1196, "income": 2405, "cost": 1208, "goods_cost": 1208, "delivery_fee": 0, "commission": 0, "delivery_income": 0, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 49, "promo_fee": 0, "real_profit": 1196, "real_margin_rate": 49, "commission_rate": 0, "commission_cost": 48, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "美团闪购", "order_cnt": 13, "revenue": 295, "gross_profit": 40, "income": 299, "cost": 170, "goods_cost": 170, "delivery_fee": 73, "commission": 15, "delivery_income": 90, "neg_cnt": 2, "neg_pct": 15, "delivery_order_cnt": 13, "avg_delivery_cost": 5, "gross_margin_rate": 13, "promo_fee": 0, "real_profit": 40, "real_margin_rate": 13, "commission_rate": 0, "commission_cost": 5, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "饿了么", "order_cnt": 5, "revenue": 134, "gross_profit": 59, "income": 185, "cost": 91, "goods_cost": 91, "delivery_fee": 0, "commission": 34, "delivery_income": 46, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 43, "promo_fee": 0, "real_profit": 58, "real_margin_rate": 43, "commission_rate": 0, "commission_cost": 2, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B085-微笑客（慕臣便利阳逻店）", "qn_store_id": 1180055, "channel": "饿了么", "order_cnt": 5, "revenue": 155, "gross_profit": 103, "income": 188, "cost": 54, "goods_cost": 54, "delivery_fee": 0, "commission": 30, "delivery_income": 25, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 66, "promo_fee": 13, "real_profit": 90, "real_margin_rate": 58, "commission_rate": 0, "commission_cost": 4, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B086-微笑客（东莞康乐店）", "qn_store_id": 1193469, "channel": "京东到家", "order_cnt": 1, "revenue": 30, "gross_profit": 12, "income": 30, "cost": 12, "goods_cost": 12, "delivery_fee": 3, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 1, "avg_delivery_cost": 3, "gross_margin_rate": 41, "promo_fee": 0, "real_profit": 12, "real_margin_rate": 41, "commission_rate": 0, "commission_cost": 0, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B086-微笑客（东莞康乐店）", "qn_store_id": 1193469, "channel": "美团闪购", "order_cnt": 177, "revenue": 3348, "gross_profit": 507, "income": 3593, "cost": 2092, "goods_cost": 2187, "delivery_fee": 824, "commission": 188, "delivery_income": 1218, "neg_cnt": 73, "neg_pct": 41, "delivery_order_cnt": 174, "avg_delivery_cost": 4, "gross_margin_rate": 15, "promo_fee": 0, "real_profit": 507, "real_margin_rate": 15, "commission_rate": 0, "commission_cost": 100, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B086-微笑客（东莞康乐店）", "qn_store_id": 1193469, "channel": "饿了么", "order_cnt": 98, "revenue": 1547, "gross_profit": 224, "income": 2136, "cost": 1376, "goods_cost": 1376, "delivery_fee": 0, "commission": 535, "delivery_income": 0, "neg_cnt": 23, "neg_pct": 23, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 14, "promo_fee": 61, "real_profit": 163, "real_margin_rate": 10, "commission_rate": 0, "commission_cost": 46, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B087-微笑客（东莞黄江店）", "qn_store_id": 1208667, "channel": "京东到家", "order_cnt": 3, "revenue": 101, "gross_profit": 31, "income": 101, "cost": 49, "goods_cost": 49, "delivery_fee": 15, "commission": 5, "delivery_income": 19, "neg_cnt": 1, "neg_pct": 33, "delivery_order_cnt": 3, "avg_delivery_cost": 5, "gross_margin_rate": 30, "promo_fee": 0, "real_profit": 31, "real_margin_rate": 30, "commission_rate": 0, "commission_cost": 3, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B087-微笑客（东莞黄江店）", "qn_store_id": 1208667, "channel": "美团闪购", "order_cnt": 77, "revenue": 1555, "gross_profit": 268, "income": 1620, "cost": 926, "goods_cost": 990, "delivery_fee": 346, "commission": 87, "delivery_income": 537, "neg_cnt": 21, "neg_pct": 27, "delivery_order_cnt": 73, "avg_delivery_cost": 4, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 268, "real_margin_rate": 17, "commission_rate": 0, "commission_cost": 46, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B087-微笑客（东莞黄江店）", "qn_store_id": 1208667, "channel": "饿了么", "order_cnt": 73, "revenue": 1141, "gross_profit": 166, "income": 1570, "cost": 985, "goods_cost": 1007, "delivery_fee": 0, "commission": 432, "delivery_income": 0, "neg_cnt": 19, "neg_pct": 26, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 14, "promo_fee": 56, "real_profit": 109, "real_margin_rate": 9, "commission_rate": 0, "commission_cost": 34, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B088-微笑客（禅城祖庙店）", "qn_store_id": 1225366, "channel": "京东到家", "order_cnt": 1, "revenue": 18, "gross_profit": 1, "income": 18, "cost": 10, "goods_cost": 10, "delivery_fee": 4, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 1, "avg_delivery_cost": 4, "gross_margin_rate": 8, "promo_fee": 0, "real_profit": 1, "real_margin_rate": 8, "commission_rate": 0, "commission_cost": 0, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B088-微笑客（禅城祖庙店）", "qn_store_id": 1225366, "channel": "美团闪购", "order_cnt": 162, "revenue": 2991, "gross_profit": 329, "income": 3177, "cost": 1892, "goods_cost": 2007, "delivery_fee": 806, "commission": 168, "delivery_income": 1087, "neg_cnt": 61, "neg_pct": 37, "delivery_order_cnt": 156, "avg_delivery_cost": 5, "gross_margin_rate": 11, "promo_fee": 0, "real_profit": 329, "real_margin_rate": 11, "commission_rate": 0, "commission_cost": 89, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B088-微笑客（禅城祖庙店）", "qn_store_id": 1225366, "channel": "饿了么", "order_cnt": 64, "revenue": 1282, "gross_profit": 144, "income": 1668, "cost": 1098, "goods_cost": 1098, "delivery_fee": 0, "commission": 424, "delivery_income": 0, "neg_cnt": 15, "neg_pct": 23, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 11, "promo_fee": 43, "real_profit": 101, "real_margin_rate": 7, "commission_rate": 0, "commission_cost": 38, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B089-微笑客（东莞高田坊店）", "qn_store_id": 1232337, "channel": "京东到家", "order_cnt": 1, "revenue": 28, "gross_profit": 6, "income": 28, "cost": 13, "goods_cost": 13, "delivery_fee": 6, "commission": 1, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 1, "avg_delivery_cost": 6, "gross_margin_rate": 24, "promo_fee": 0, "real_profit": 6, "real_margin_rate": 24, "commission_rate": 0, "commission_cost": 0, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "B089-微笑客（东莞高田坊店）", "qn_store_id": 1232337, "channel": "美团闪购", "order_cnt": 37, "revenue": 777, "gross_profit": 142, "income": 829, "cost": 426, "goods_cost": 438, "delivery_fee": 218, "commission": 42, "delivery_income": 305, "neg_cnt": 8, "neg_pct": 21, "delivery_order_cnt": 36, "avg_delivery_cost": 6, "gross_margin_rate": 18, "promo_fee": 0, "real_profit": 142, "real_margin_rate": 18, "commission_rate": 0, "commission_cost": 23, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B089-微笑客（东莞高田坊店）", "qn_store_id": 1232337, "channel": "饿了么", "order_cnt": 49, "revenue": 496, "gross_profit": 22, "income": 832, "cost": 536, "goods_cost": 536, "delivery_fee": 0, "commission": 273, "delivery_income": 0, "neg_cnt": 25, "neg_pct": 51, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 4, "promo_fee": 1, "real_profit": 21, "real_margin_rate": 4, "commission_rate": 0, "commission_cost": 14, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B090-微笑客（东莞世和路店）", "qn_store_id": 1243753, "channel": "京东到家", "order_cnt": 4, "revenue": 211, "gross_profit": 47, "income": 153, "cost": 78, "goods_cost": 108, "delivery_fee": 18, "commission": 12, "delivery_income": 36, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 2, "avg_delivery_cost": 9, "gross_margin_rate": 22, "promo_fee": 0, "real_profit": 47, "real_margin_rate": 22, "commission_rate": 0, "commission_cost": 6, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B090-微笑客（东莞世和路店）", "qn_store_id": 1243753, "channel": "美团闪购", "order_cnt": 104, "revenue": 1816, "gross_profit": 205, "income": 1971, "cost": 1125, "goods_cost": 1172, "delivery_fee": 546, "commission": 103, "delivery_income": 766, "neg_cnt": 31, "neg_pct": 29, "delivery_order_cnt": 101, "avg_delivery_cost": 5, "gross_margin_rate": 11, "promo_fee": 0, "real_profit": 205, "real_margin_rate": 11, "commission_rate": 0, "commission_cost": 54, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "B090-微笑客（东莞世和路店）", "qn_store_id": 1243753, "channel": "饿了么", "order_cnt": 49, "revenue": 743, "gross_profit": 74, "income": 970, "cost": 614, "goods_cost": 651, "delivery_fee": 0, "commission": 293, "delivery_income": 0, "neg_cnt": 15, "neg_pct": 30, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 10, "promo_fee": 0, "real_profit": 74, "real_margin_rate": 10, "commission_rate": 0, "commission_cost": 22, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q019-微笑客（博罗中园路店）", "qn_store_id": 1160538, "channel": "京东到家", "order_cnt": 13, "revenue": 523, "gross_profit": 148, "income": 528, "cost": 279, "goods_cost": 279, "delivery_fee": 69, "commission": 30, "delivery_income": 82, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 13, "avg_delivery_cost": 5, "gross_margin_rate": 28, "promo_fee": 0, "real_profit": 148, "real_margin_rate": 28, "commission_rate": 0, "commission_cost": 10, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "Q019-微笑客（博罗中园路店）", "qn_store_id": 1160538, "channel": "美团闪购", "order_cnt": 199, "revenue": 3379, "gross_profit": 613, "income": 3847, "cost": 2264, "goods_cost": 2320, "delivery_fee": 776, "commission": 198, "delivery_income": 1383, "neg_cnt": 50, "neg_pct": 25, "delivery_order_cnt": 191, "avg_delivery_cost": 4, "gross_margin_rate": 18, "promo_fee": 0, "real_profit": 613, "real_margin_rate": 18, "commission_rate": 0, "commission_cost": 67, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "Q019-微笑客（博罗中园路店）", "qn_store_id": 1160538, "channel": "饿了么", "order_cnt": 141, "revenue": 2342, "gross_profit": 535, "income": 3432, "cost": 1877, "goods_cost": 1885, "delivery_fee": 38, "commission": 990, "delivery_income": 836, "neg_cnt": 22, "neg_pct": 15, "delivery_order_cnt": 5, "avg_delivery_cost": 7, "gross_margin_rate": 22, "promo_fee": 64, "real_profit": 470, "real_margin_rate": 20, "commission_rate": 0, "commission_cost": 46, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "Q028-微笑客（宣汉杨家湾店）", "qn_store_id": 1150787, "channel": "京东到家", "order_cnt": 3, "revenue": 169, "gross_profit": 57, "income": 169, "cost": 87, "goods_cost": 87, "delivery_fee": 14, "commission": 10, "delivery_income": 15, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 3, "avg_delivery_cost": 4, "gross_margin_rate": 34, "promo_fee": 0, "real_profit": 57, "real_margin_rate": 34, "commission_rate": 0, "commission_cost": 3, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "Q028-微笑客（宣汉杨家湾店）", "qn_store_id": 1150787, "channel": "美团闪购", "order_cnt": 64, "revenue": 1687, "gross_profit": 465, "income": 1686, "cost": 891, "goods_cost": 930, "delivery_fee": 244, "commission": 90, "delivery_income": 346, "neg_cnt": 5, "neg_pct": 7, "delivery_order_cnt": 56, "avg_delivery_cost": 4, "gross_margin_rate": 27, "promo_fee": 25, "real_profit": 440, "real_margin_rate": 26, "commission_rate": 0, "commission_cost": 33, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "Q028-微笑客（宣汉杨家湾店）", "qn_store_id": 1150787, "channel": "饿了么", "order_cnt": 6, "revenue": 126, "gross_profit": 26, "income": 155, "cost": 84, "goods_cost": 84, "delivery_fee": 0, "commission": 44, "delivery_income": 32, "neg_cnt": 1, "neg_pct": 16, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 20, "promo_fee": 0, "real_profit": 26, "real_margin_rate": 20, "commission_rate": 0, "commission_cost": 2, "commission_margin": 2}, {"日期": "2026-05-27", "store_name": "Q076-微笑客（衡阳银杏路店）", "qn_store_id": 1139168, "channel": "美团闪购", "order_cnt": 112, "revenue": 1604, "gross_profit": -32, "income": 1741, "cost": 1121, "goods_cost": 1163, "delivery_fee": 563, "commission": 91, "delivery_income": 681, "neg_cnt": 55, "neg_pct": 49, "delivery_order_cnt": 107, "avg_delivery_cost": 5, "gross_margin_rate": -2, "promo_fee": 0, "real_profit": -32, "real_margin_rate": -2, "commission_rate": 0, "commission_cost": 48, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q076-微笑客（衡阳银杏路店）", "qn_store_id": 1139168, "channel": "饿了么", "order_cnt": 65, "revenue": 694, "gross_profit": -17, "income": 1012, "cost": 645, "goods_cost": 658, "delivery_fee": 0, "commission": 390, "delivery_income": 347, "neg_cnt": 43, "neg_pct": 66, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": -2, "promo_fee": 44, "real_profit": -62, "real_margin_rate": -9, "commission_rate": 0, "commission_cost": 20, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q077-微笑客（贵港石羊塘中路店）", "qn_store_id": 1239115, "channel": "京东到家", "order_cnt": 1, "revenue": 58, "gross_profit": 0, "income": 0, "cost": 0, "goods_cost": 31, "delivery_fee": 0, "commission": 3, "delivery_income": 5, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 0, "promo_fee": 0, "real_profit": 0, "real_margin_rate": 0, "commission_rate": 0, "commission_cost": 1, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q077-微笑客（贵港石羊塘中路店）", "qn_store_id": 1239115, "channel": "美团闪购", "order_cnt": 131, "revenue": 2971, "gross_profit": 512, "income": 3074, "cost": 1874, "goods_cost": 1887, "delivery_fee": 534, "commission": 154, "delivery_income": 910, "neg_cnt": 36, "neg_pct": 27, "delivery_order_cnt": 129, "avg_delivery_cost": 4, "gross_margin_rate": 17, "promo_fee": 0, "real_profit": 512, "real_margin_rate": 17, "commission_rate": 0, "commission_cost": 89, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q077-微笑客（贵港石羊塘中路店）", "qn_store_id": 1239115, "channel": "饿了么", "order_cnt": 41, "revenue": 926, "gross_profit": 245, "income": 1299, "cost": 770, "goods_cost": 770, "delivery_fee": 0, "commission": 282, "delivery_income": 261, "neg_cnt": 6, "neg_pct": 14, "delivery_order_cnt": 0, "avg_delivery_cost": 0, "gross_margin_rate": 26, "promo_fee": 46, "real_profit": 199, "real_margin_rate": 21, "commission_rate": 0, "commission_cost": 27, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "京东到家", "order_cnt": 2, "revenue": 52, "gross_profit": 10, "income": 52, "cost": 30, "goods_cost": 30, "delivery_fee": 7, "commission": 3, "delivery_income": 10, "neg_cnt": 0, "neg_pct": 0, "delivery_order_cnt": 2, "avg_delivery_cost": 3, "gross_margin_rate": 20, "promo_fee": 0, "real_profit": 10, "real_margin_rate": 20, "commission_rate": 0, "commission_cost": 1, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "美团闪购", "order_cnt": 105, "revenue": 2210, "gross_profit": 464, "income": 2355, "cost": 1335, "goods_cost": 1368, "delivery_fee": 437, "commission": 120, "delivery_income": 583, "neg_cnt": 24, "neg_pct": 22, "delivery_order_cnt": 103, "avg_delivery_cost": 4, "gross_margin_rate": 21, "promo_fee": 150, "real_profit": 314, "real_margin_rate": 14, "commission_rate": 0, "commission_cost": 66, "commission_margin": 3}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "饿了么", "order_cnt": 106, "revenue": 1437, "gross_profit": 188, "income": 2058, "cost": 1313, "goods_cost": 1411, "delivery_fee": 14, "commission": 559, "delivery_income": 94, "neg_cnt": 33, "neg_pct": 31, "delivery_order_cnt": 2, "avg_delivery_cost": 7, "gross_margin_rate": 13, "promo_fee": 44, "real_profit": 144, "real_margin_rate": 10, "commission_rate": 0, "commission_cost": 43, "commission_margin": 3}];
 const promoData = [{"日期": "2026-05-27", "store_name": "B058-微笑客（广州花都店）", "qn_store_id": 1101115, "channel": "饿了么", "promo_fee": 60}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "饿了么", "promo_fee": 44}, {"日期": "2026-05-27", "store_name": "Q019-微笑客（博罗中园路店）", "qn_store_id": 1160538, "channel": "饿了么", "promo_fee": 64}, {"日期": "2026-05-27", "store_name": "Q076-微笑客（衡阳银杏路店）", "qn_store_id": 1139168, "channel": "饿了么", "promo_fee": 44}, {"日期": "2026-05-27", "store_name": "B086-微笑客（东莞康乐店）", "qn_store_id": 1193469, "channel": "饿了么", "promo_fee": 61}, {"日期": "2026-05-27", "store_name": "B061-微笑客（东莞惠众百货）", "qn_store_id": 1115375, "channel": "饿了么", "promo_fee": 8}, {"日期": "2026-05-27", "store_name": "B009-微笑客（广州大源店）", "qn_store_id": 1045634, "channel": "饿了么", "promo_fee": 29}, {"日期": "2026-05-27", "store_name": "B010-微笑客（东莞樟木头店）", "qn_store_id": 1130415, "channel": "饿了么", "promo_fee": 28}, {"日期": "2026-05-27", "store_name": "B025-微笑客（武汉东风大道店）", "qn_store_id": 1131039, "channel": "饿了么", "promo_fee": 14}, {"日期": "2026-05-27", "store_name": "关店-微笑客(龙岩新罗店)", "qn_store_id": 1130138, "channel": "饿了么", "promo_fee": 0}, {"日期": "2026-05-27", "store_name": "B079-微笑客（东莞莞樟店）", "qn_store_id": 1136745, "channel": "饿了么", "promo_fee": 50}, {"日期": "2026-05-27", "store_name": "B082-微笑客（韶关浈江店）", "qn_store_id": 1150270, "channel": "饿了么", "promo_fee": 0}, {"日期": "2026-05-27", "store_name": "B085-微笑客（慕臣便利阳逻店）", "qn_store_id": 1180055, "channel": "饿了么", "promo_fee": 13}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "饿了么", "promo_fee": 44}, {"日期": "2026-05-27", "store_name": "B087-微笑客（东莞黄江店）", "qn_store_id": 1208667, "channel": "饿了么", "promo_fee": 56}, {"日期": "2026-05-27", "store_name": "B089-微笑客（东莞高田坊店）", "qn_store_id": 1232337, "channel": "饿了么", "promo_fee": 1}, {"日期": "2026-05-27", "store_name": "B088-微笑客（禅城祖庙店）", "qn_store_id": 1225366, "channel": "饿了么", "promo_fee": 43}, {"日期": "2026-05-27", "store_name": "Q077-微笑客（贵港石羊塘中路店）", "qn_store_id": 1239115, "channel": "饿了么", "promo_fee": 46}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "饿了么", "promo_fee": 13}, {"日期": "2026-05-27", "store_name": "B080-微笑客（东莞环城东店）", "qn_store_id": 1136748, "channel": "美团闪购", "promo_fee": 100}, {"日期": "2026-05-27", "store_name": "Q028-微笑客（宣汉杨家湾店）", "qn_store_id": 1150787, "channel": "美团闪购", "promo_fee": 25}, {"日期": "2026-05-27", "store_name": "Q078-微笑客（廉江石龙店）", "qn_store_id": 1192867, "channel": "美团闪购", "promo_fee": 150}, {"日期": "2026-05-27", "store_name": "B075-微笑客（深圳北站店）", "qn_store_id": 1277344, "channel": "美团闪购", "promo_fee": 150}];
-const allStores = ["B009-微笑客（广州大源店）", "B010-微笑客（东莞樟木头店）", "B020-微笑客（江门乐购一刻）", "B025-微笑客（武汉东风大道店）", "B052-微笑客（东莞谢岗店）", "B055-微笑客（广州珠光路店）", "B058-微笑客（广州花都店）", "B061-微笑客（东莞惠众百货）", "B073-微笑客（韶关沐溪大道店）", "B075-微笑客（深圳北站店）", "B079-微笑客（东莞莞樟店）", "B080-微笑客（东莞环城东店）", "B082-微笑客（韶关浈江店）", "B085-微笑客（慕臣便利阳逻店）", "B086-微笑客（东莞康乐店）", "B087-微笑客（东莞黄江店）", "B088-微笑客（禅城祖庙店）", "B089-微笑客（东莞高田坊店）", "B090-微笑客（东莞世和路店）", "Q019-微笑客（博罗中园路店）", "Q028-微笑客（宣汉杨家湾店）", "Q076-微笑客（衡阳银杏路店）", "Q077-微笑客（贵港石羊塘中路店）", "Q078-微笑客（廉江石龙店）"];
+const allStoresFull = ["B009-微笑客（广州大源店）", "B010-微笑客（东莞樟木头店）", "B020-微笑客（江门乐购一刻）", "B025-微笑客（武汉东风大道店）", "B052-微笑客（东莞谢岗店）", "B055-微笑客（广州珠光路店）", "B058-微笑客（广州花都店）", "B061-微笑客（东莞惠众百货）", "B073-微笑客（韶关沐溪大道店）", "B075-微笑客（深圳北站店）", "B079-微笑客（东莞莞樟店）", "B080-微笑客（东莞环城东店）", "B082-微笑客（韶关浈江店）", "B085-微笑客（慕臣便利阳逻店）", "B086-微笑客（东莞康乐店）", "B087-微笑客（东莞黄江店）", "B088-微笑客（禅城祖庙店）", "B089-微笑客（东莞高田坊店）", "B090-微笑客（东莞世和路店）", "Q019-微笑客（博罗中园路店）", "Q028-微笑客（宣汉杨家湾店）", "Q076-微笑客（衡阳银杏路店）", "Q077-微笑客（贵港石羊塘中路店）", "Q078-微笑客（廉江石龙店）"];
 const allChannels = ["京东到家", "客无忧POS", "美团闪购", "饿了么"];
 const allDates = ["2026-05-27"];
+const shortNames = {"B009-微笑客（广州大源店）": "广州大源店", "B010-微笑客（东莞樟木头店）": "东莞樟木头店", "B020-微笑客（江门乐购一刻）": "江门乐购一刻", "B025-微笑客（武汉东风大道店）": "武汉东风大道店", "B052-微笑客（东莞谢岗店）": "东莞谢岗店", "B055-微笑客（广州珠光路店）": "广州珠光路店", "B058-微笑客（广州花都店）": "广州花都店", "B061-微笑客（东莞惠众百货）": "东莞惠众百货", "B073-微笑客（韶关沐溪大道店）": "韶关沐溪大道店", "B075-微笑客（深圳北站店）": "深圳北站店", "B079-微笑客（东莞莞樟店）": "东莞莞樟店", "B080-微笑客（东莞环城东店）": "东莞环城东店", "B082-微笑客（韶关浈江店）": "韶关浈江店", "B085-微笑客（慕臣便利阳逻店）": "慕臣便利阳逻店", "B086-微笑客（东莞康乐店）": "东莞康乐店", "B087-微笑客（东莞黄江店）": "东莞黄江店", "B088-微笑客（禅城祖庙店）": "禅城祖庙店", "B089-微笑客（东莞高田坊店）": "东莞高田坊店", "B090-微笑客（东莞世和路店）": "东莞世和路店", "Q019-微笑客（博罗中园路店）": "博罗中园路店", "Q028-微笑客（宣汉杨家湾店）": "宣汉杨家湾店", "Q076-微笑客（衡阳银杏路店）": "衡阳银杏路店", "Q077-微笑客（贵港石羊塘中路店）": "贵港石羊塘中路店", "Q078-微笑客（廉江石龙店）": "廉江石龙店"};
+const searchKeys = {"B009-微笑客（广州大源店）": "[\"广州大源店\", \"B009\", \"B009-微笑客（广州大源店）\"]", "B010-微笑客（东莞樟木头店）": "[\"东莞樟木头店\", \"B010\", \"B010-微笑客（东莞樟木头店）\"]", "B020-微笑客（江门乐购一刻）": "[\"江门乐购一刻\", \"B020\", \"B020-微笑客（江门乐购一刻）\"]", "B025-微笑客（武汉东风大道店）": "[\"武汉东风大道店\", \"B025\", \"B025-微笑客（武汉东风大道店）\"]", "B052-微笑客（东莞谢岗店）": "[\"东莞谢岗店\", \"B052\", \"B052-微笑客（东莞谢岗店）\"]", "B055-微笑客（广州珠光路店）": "[\"广州珠光路店\", \"B055\", \"B055-微笑客（广州珠光路店）\"]", "B058-微笑客（广州花都店）": "[\"广州花都店\", \"B058\", \"B058-微笑客（广州花都店）\"]", "B061-微笑客（东莞惠众百货）": "[\"东莞惠众百货\", \"B061\", \"B061-微笑客（东莞惠众百货）\"]", "B073-微笑客（韶关沐溪大道店）": "[\"韶关沐溪大道店\", \"B073\", \"B073-微笑客（韶关沐溪大道店）\"]", "B075-微笑客（深圳北站店）": "[\"深圳北站店\", \"B075\", \"B075-微笑客（深圳北站店）\"]", "B079-微笑客（东莞莞樟店）": "[\"东莞莞樟店\", \"B079\", \"B079-微笑客（东莞莞樟店）\"]", "B080-微笑客（东莞环城东店）": "[\"东莞环城东店\", \"B080\", \"B080-微笑客（东莞环城东店）\"]", "B082-微笑客（韶关浈江店）": "[\"韶关浈江店\", \"B082\", \"B082-微笑客（韶关浈江店）\"]", "B085-微笑客（慕臣便利阳逻店）": "[\"慕臣便利阳逻店\", \"B085\", \"B085-微笑客（慕臣便利阳逻店）\"]", "B086-微笑客（东莞康乐店）": "[\"东莞康乐店\", \"B086\", \"B086-微笑客（东莞康乐店）\"]", "B087-微笑客（东莞黄江店）": "[\"东莞黄江店\", \"B087\", \"B087-微笑客（东莞黄江店）\"]", "B088-微笑客（禅城祖庙店）": "[\"禅城祖庙店\", \"B088\", \"B088-微笑客（禅城祖庙店）\"]", "B089-微笑客（东莞高田坊店）": "[\"东莞高田坊店\", \"B089\", \"B089-微笑客（东莞高田坊店）\"]", "B090-微笑客（东莞世和路店）": "[\"东莞世和路店\", \"B090\", \"B090-微笑客（东莞世和路店）\"]", "Q019-微笑客（博罗中园路店）": "[\"博罗中园路店\", \"Q019\", \"Q019-微笑客（博罗中园路店）\"]", "Q028-微笑客（宣汉杨家湾店）": "[\"宣汉杨家湾店\", \"Q028\", \"Q028-微笑客（宣汉杨家湾店）\"]", "Q076-微笑客（衡阳银杏路店）": "[\"衡阳银杏路店\", \"Q076\", \"Q076-微笑客（衡阳银杏路店）\"]", "Q077-微笑客（贵港石羊塘中路店）": "[\"贵港石羊塘中路店\", \"Q077\", \"Q077-微笑客（贵港石羊塘中路店）\"]", "Q078-微笑客（廉江石龙店）": "[\"廉江石龙店\", \"Q078\", \"Q078-微笑客（廉江石龙店）\"]"};
 
-const plotlyLayout = {
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
-    font: { color: '#e8eaf0', family: '-apple-system, PingFang SC, Microsoft YaHei' },
-    xaxis: { gridcolor: '#2a2d3a', zerolinecolor: '#2a2d3a' },
-    yaxis: { gridcolor: '#2a2d3a', zerolinecolor: '#2a2d3a' },
-    margin: { l: 60, r: 20, t: 30, b: 80 },
-    height: chartH
-};
-const plotlyCfg = { displayModeBar: false, responsive: true };
 const isMobile = window.innerWidth < 768;
-const chartH = isMobile ? 280 : 420;
-const chartHSmall = isMobile ? 240 : 380;
+const chartH = isMobile ? 260 : 380;
+const chartHS = isMobile ? 220 : 340;
 
-// --- Filter State ---
-const dateFrom = document.getElementById('dateFrom');
-const dateTo = document.getElementById('dateTo');
-let selectedStores = [...allStores];
+const plotlyLayout = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#e8eaf0',family:'-apple-system,PingFang SC,Microsoft YaHei'}, xaxis:{gridcolor:'#2a2d3a',zerolinecolor:'#2a2d3a'}, yaxis:{gridcolor:'#2a2d3a',zerolinecolor:'#2a2d3a'}, margin:{l:60,r:20,t:20,b:60}, height:chartH };
+const plotlyCfg = { displayModeBar:false, responsive:true };
+
+// ============ SHORT NAME HELPERS ============
+function short(full) { return shortNames[full] || full; }
+
+// ============ DATE STATE ============
+let dateFrom, dateTo;
+let calDate = new Date();
+let calSelect = []; // clicked dates in [start, end]
+let calOpen = false;
+
+// Convert YYYY-MM-DD to Date (local)
+function dParse(s) { let p=s.split('-'); return new Date(+p[0],+p[1]-1,+p[2]); }
+function dFmt(d) { return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function today() { let d=new Date(); return dFmt(d); }
+function yesterday() { let d=new Date(); d.setDate(d.getDate()-1); return dFmt(d); }
+
+function calcWeekBounds(d) { let wd = d.getDay()||7; let mon = new Date(d); mon.setDate(d.getDate()-wd+1); let sun = new Date(mon); sun.setDate(mon.getDate()+6); return [mon,sun]; }
+function calcMonthBounds(d) { return [new Date(d.getFullYear(),d.getMonth(),1), new Date(d.getFullYear(),d.getMonth()+1,0)]; }
+
+// Find nearest available date in allDates
+function nearestDate(target, dir) {
+    let t = dParse(target);
+    let best = null, bestDiff = Infinity;
+    allDates.forEach(d => {
+        let dd = dParse(d);
+        let diff = Math.abs(dd - t);
+        if (diff < bestDiff) { bestDiff = diff; best = d; }
+    });
+    return best || allDates[0];
+}
+
+// ============ DATE RANGE BUTTONS ============
+function setDateRange(mode) {
+    document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
+    let from, to;
+    switch(mode) {
+        case 'yesterday':
+            from = yesterday(); to = from;
+            break;
+        case 'thisWeek':
+            let [mon,sun] = calcWeekBounds(new Date());
+            from = dFmt(mon); to = dFmt(sun);
+            break;
+        case 'thisMonth':
+            let [m1,m2] = calcMonthBounds(new Date());
+            from = dFmt(m1); to = dFmt(m2);
+            break;
+        case 'lastMonth':
+            let d2 = new Date(); d2.setMonth(d2.getMonth()-1);
+            let [lm1,lm2] = calcMonthBounds(d2);
+            from = dFmt(lm1); to = dFmt(lm2);
+            break;
+        default: break;
+    }
+    dateFrom = nearestDate(from); dateTo = nearestDate(to);
+    if (dateFrom > dateTo) [dateFrom, dateTo] = [dateTo, dateFrom];
+    if (mode !== 'custom') {
+        let btn = document.querySelector('.date-btn[onclick*="'+mode+'"]');
+        if (btn) btn.classList.add('active');
+    }
+    calOpen = false; document.getElementById('calendarWrap').classList.remove('show');
+    refresh();
+}
+
+function toggleCalendar() {
+    calOpen = !calOpen;
+    document.getElementById('calendarWrap').classList.toggle('show', calOpen);
+    if (calOpen) {
+        calDate = dParse(dateFrom || allDates[0]);
+        calSelect = [];
+        renderCalendar();
+    }
+}
+
+// ============ CALENDAR ============
+function renderCalendar() {
+    const y = calDate.getFullYear(), m = calDate.getMonth();
+    document.getElementById('calTitle').textContent = y+'年'+(m+1)+'月';
+    const first = new Date(y,m,1).getDay() || 7;
+    const daysInMonth = new Date(y,m+1,0).getDate();
+    const daysInPrev = new Date(y,m,0).getDate();
+    let html = '<div class="cal-weekday">一</div><div class="cal-weekday">二</div><div class="cal-weekday">三</div><div class="cal-weekday">四</div><div class="cal-weekday">五</div><div class="cal-weekday">六</div><div class="cal-weekday">日</div>';
+
+    // prev month
+    for (let i=first-2; i>=0; i--) {
+        let day = daysInPrev - i;
+        let d = new Date(y,m-1,day);
+        let ds = dFmt(d);
+        html += '<div class="cal-day other-month" data-date="'+ds+'" onclick="calClick(''+ds+'')">'+day+'</div>';
+    }
+    // this month
+    for (let d=1; d<=daysInMonth; d++) {
+        let dt = new Date(y,m,d);
+        let ds = dFmt(dt);
+        let cls = 'cal-day';
+        if (calSelect.length===2) {
+            let s=dParse(calSelect[0]), e=dParse(calSelect[1]);
+            if (dt>=s && dt<=e) {
+                cls += ' in-range';
+                if (dFmt(dt)===calSelect[0]) cls += ' range-start';
+                if (dFmt(dt)===calSelect[1]) cls += ' range-end';
+            }
+        } else if (calSelect.length===1 && calSelect[0]===ds) {
+            cls += ' range-start range-end';
+        }
+        html += '<div class="'+cls+'" data-date="'+ds+'" onclick="calClick(''+ds+'')">'+d+'</div>';
+    }
+    // next month
+    let total = first + daysInMonth;
+    let remaining = (7 - total % 7) % 7;
+    for (let d=1; d<=remaining; d++) {
+        let dt = new Date(y,m+1,d);
+        let ds = dFmt(dt);
+        html += '<div class="cal-day other-month" data-date="'+ds+'" onclick="calClick(''+ds+'')">'+d+'</div>';
+    }
+    document.getElementById('calGrid').innerHTML = html;
+    updateCalRange();
+}
+
+function calMonth(delta) {
+    calDate.setMonth(calDate.getMonth()+delta);
+    renderCalendar();
+}
+
+function calClick(ds) {
+    if (calSelect.length===0 || calSelect.length===2) {
+        calSelect = [ds];
+    } else {
+        let s = dParse(calSelect[0]), e = dParse(ds);
+        if (e < s) [s,e] = [e,s];
+        calSelect = [dFmt(s), dFmt(e)];
+        dateFrom = nearestDate(calSelect[0]);
+        dateTo = nearestDate(calSelect[1]);
+        document.querySelectorAll('.date-btn').forEach(b => b.classList.remove('active'));
+        refresh();
+    }
+    renderCalendar();
+}
+
+function updateCalRange() {
+    let el = document.getElementById('calRangeLabel');
+    if (calSelect.length===1) el.textContent = '已选: '+calSelect[0]+' (请选结束日期)';
+    else if (calSelect.length===2) el.textContent = '区间: '+calSelect[0]+' ~ '+calSelect[1];
+    else el.textContent = '点击日期选开始';
+}
+
+// ============ STORE SEARCH ============
+function filterStores() {
+    let q = document.getElementById('storeSearch').value.trim().toLowerCase();
+    document.querySelectorAll('#storeChips .chip').forEach(c => {
+        let full = c.getAttribute('data-full');
+        let keys = JSON.parse(searchKeys[full] || '[]');
+        let match = q==='' || keys.some(k => k.toLowerCase().includes(q));
+        c.classList.toggle('hidden', !match);
+    });
+}
+
+// ============ FILTER STATE ============
+let selectedStores = [...allStoresFull];
 let selectedChannels = [...allChannels];
 
 function createChips(containerId, items, selectedArr, onChange) {
@@ -388,16 +382,12 @@ function createChips(containerId, items, selectedArr, onChange) {
     items.forEach(item => {
         const chip = document.createElement('span');
         chip.className = 'chip active';
-        chip.textContent = item;
+        chip.setAttribute('data-full', item);
+        chip.textContent = short(item);
         chip.onclick = function() {
             const idx = selectedArr.indexOf(item);
-            if (idx > -1) {
-                selectedArr.splice(idx, 1);
-                this.classList.remove('active');
-            } else {
-                selectedArr.push(item);
-                this.classList.add('active');
-            }
+            if (idx > -1) { selectedArr.splice(idx,1); this.classList.remove('active'); }
+            else { selectedArr.push(item); this.classList.add('active'); }
             if (onChange) onChange();
         };
         container.appendChild(chip);
@@ -405,20 +395,18 @@ function createChips(containerId, items, selectedArr, onChange) {
 }
 
 function selectAll(type) {
-    if (type === 'stores') { selectedStores = [...allStores]; }
-    else { selectedChannels = [...allChannels]; }
-    refreshChips();
-    refresh();
+    if (type==='stores') selectedStores=[...allStoresFull];
+    else selectedChannels=[...allChannels];
+    refreshChips(); refresh();
 }
 function deselectAll(type) {
-    if (type === 'stores') { selectedStores = []; }
-    else { selectedChannels = []; }
-    refreshChips();
-    refresh();
+    if (type==='stores') selectedStores=[];
+    else selectedChannels=[];
+    refreshChips(); refresh();
 }
 function refreshChips() {
     document.querySelectorAll('#storeChips .chip').forEach(c => {
-        c.classList.toggle('active', selectedStores.includes(c.textContent));
+        c.classList.toggle('active', selectedStores.includes(c.getAttribute('data-full')));
     });
     document.querySelectorAll('#channelChips .chip').forEach(c => {
         c.classList.toggle('active', selectedChannels.includes(c.textContent));
@@ -426,228 +414,160 @@ function refreshChips() {
 }
 
 function initFilters() {
-    allDates.forEach(d => {
-        dateFrom.innerHTML += '<option value="' + d + '">' + d + '</option>';
-        dateTo.innerHTML += '<option value="' + d + '">' + d + '</option>';
-    });
-    dateTo.value = allDates[allDates.length - 1];
-    createChips('storeChips', allStores, selectedStores, refresh);
+    setDateRange('yesterday');
+    createChips('storeChips', allStoresFull, selectedStores, refresh);
     createChips('channelChips', allChannels, selectedChannels, refresh);
 }
 
+// ============ TAB ============
 function switchTab(name, btn) {
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
     btn.classList.add('active');
-    document.getElementById('tab-' + name).classList.add('active');
+    document.getElementById('tab-'+name).classList.add('active');
 }
 
-// --- Helpers ---
-function sum(arr, key) { return arr.reduce((s, r) => s + (r[key] || 0), 0); }
+// ============ HELPERS ============
+function sum(arr, key) { return arr.reduce((s,r)=>s+(r[key]||0),0); }
+function fmtY(n) { return '¥' + (n||0).toLocaleString(undefined,{maximumFractionDigits:0}); }
 
 function groupBy(arr, keys) {
-    const map = {};
-    arr.forEach(r => {
-        const k = keys.map(k2 => r[k2]).join('|');
-        if (!map[k]) { map[k] = {}; keys.forEach(kk => map[k][kk] = r[kk]); map[k]._rows = []; }
+    const map={};
+    arr.forEach(r=>{
+        const k=keys.map(k2=>r[k2]).join('|');
+        if(!map[k]){map[k]={};keys.forEach(kk=>map[k][kk]=r[kk]);map[k]._rows=[];}
         map[k]._rows.push(r);
     });
-    return Object.values(map).map(g => {
-        const result = {};
-        keys.forEach(kk => result[kk] = g[kk]);
-        g._rows.forEach(r => {
-            Object.keys(r).forEach(k => {
-                if (!keys.includes(k)) result[k] = (result[k] || 0) + (r[k] || 0);
-            });
-        });
+    return Object.values(map).map(g=>{
+        const result={};
+        keys.forEach(kk=>result[kk]=g[kk]);
+        g._rows.forEach(r=>{Object.keys(r).forEach(k=>{if(!keys.includes(k))result[k]=(result[k]||0)+(r[k]||0);});});
         return result;
     });
 }
 
-function getFilteredData() {
-    const from = dateFrom.value, to = dateTo.value;
-    return rawData.filter(r =>
-        r['日期'] >= from && r['日期'] <= to &&
-        selectedStores.includes(r['store_name']) &&
-        selectedChannels.includes(r['channel'])
-    );
+function getFiltered() {
+    const f=dateFrom, t=dateTo;
+    return rawData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(r['store_name'])&&selectedChannels.includes(r['channel']));
 }
-
 function getFilteredPromo() {
-    const from = dateFrom.value, to = dateTo.value;
-    return promoData.filter(r =>
-        r['日期'] >= from && r['日期'] <= to &&
-        selectedStores.includes(r['store_name'])
-    );
+    const f=dateFrom, t=dateTo;
+    return promoData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(r['store_name']));
 }
 
-// --- KPIs ---
+// ============ KPIs ============
 function renderKPIs(data) {
-    const orders = sum(data, 'order_cnt');
-    const revenue = sum(data, 'revenue');
-    const promo = sum(data, 'promo_fee');
-    const realProfit = sum(data, 'real_profit');
-    const negCnt = sum(data, 'neg_cnt');
-    const margin = revenue > 0 ? (realProfit / revenue * 100).toFixed(1) : 0;
-    const negPct = orders > 0 ? (negCnt / orders * 100).toFixed(1) : 0;
-    const aov = orders > 0 ? (revenue / orders).toFixed(1) : 0;
-    const negClass = negPct > 25 ? 'red' : 'green';
-    const negText = negPct > 25 ? '需关注' : '正常';
+    const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'real_profit');
+    const cc=sum(data,'commission_cost'), nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
+    const df2=sum(data,'delivery_fee'),doc=sum(data,'delivery_order_cnt');
+    const margin=rev>0?(cc/rev*100).toFixed(1):0;
+    const negPct=ord>0?(nc/ord*100).toFixed(1):0;
+    const aov=ord>0?(rev/ord).toFixed(1):0;
+    const adc=doc>0?(df2/doc).toFixed(1):0;
+    const ngCls=negPct>25?'red':'green';
     document.getElementById('kpiGrid').innerHTML =
-        '<div class="kpi-card blue"><div class="kpi-label">总单量</div><div class="kpi-value">' + orders.toLocaleString() + '</div></div>' +
-        '<div class="kpi-card accent"><div class="kpi-label">总营收</div><div class="kpi-value">¥' + revenue.toLocaleString(undefined,{maximumFractionDigits:0}) + '</div></div>' +
-        '<div class="kpi-card green"><div class="kpi-label">真实毛利</div><div class="kpi-value">¥' + realProfit.toLocaleString(undefined,{maximumFractionDigits:0}) + '</div><div class="kpi-sub" style="color:var(--red)">-¥' + promo.toFixed(0) + ' 推广</div></div>' +
-        '<div class="kpi-card yellow"><div class="kpi-label">真实毛利率</div><div class="kpi-value">' + margin + '%</div></div>' +
-        '<div class="kpi-card accent"><div class="kpi-label">客单价</div><div class="kpi-value">¥' + aov + '</div></div>' +
-        '<div class="kpi-card ' + negClass + '"><div class="kpi-label">负毛利占比</div><div class="kpi-value">' + negPct + '%</div><div class="kpi-sub"><span class="badge badge-' + (negPct > 25 ? 'warn' : 'ok') + '">' + negText + '</span></div></div>';
+        '<div class="kpi-card blue"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div></div>'+
+        '<div class="kpi-card accent"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div></div>'+
+        '<div class="kpi-card green"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--red)">-¥'+pf.toFixed(0)+' 推广</div></div>'+
+        '<div class="kpi-card orange"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cc)+'</div></div>'+
+        '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div></div>'+
+        '<div class="kpi-card accent"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div></div>'+
+        '<div class="kpi-card '+ngCls+'"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub">单均配送 ¥'+adc+'</div></div>';
 }
 
-// --- Store Tab ---
+// ============ STORE TAB ============
 function renderStore(data) {
-    const stores = groupBy(data, ['store_name']);
-    stores.sort((a, b) => b.real_profit - a.real_profit);
-    const names = stores.map(s => s.store_name);
-    const revs = stores.map(s => s.revenue || 0);
-    const profits = stores.map(s => s.real_profit || 0);
-    Plotly.newPlot('chartStoreBar', [
-        { x: names, y: revs, name: '营收', type: 'bar', marker: { color: '#5B8FF9' } },
-        { x: names, y: profits, name: '真实毛利', type: 'bar', marker: { color: '#5AD8A6' } }
-    ], { ...plotlyLayout, barmode: 'group', xaxis: { ...plotlyLayout.xaxis, tickangle: -45 }, margin: { l: 60, r: 20, t: 30, b: 120 } }, plotlyCfg);
+    const stores = groupBy(data,['store_name']);
+    stores.sort((a,b)=>b.revenue-a.revenue);
+    const names=stores.map(s=>short(s.store_name));
+    Plotly.newPlot('chartStoreBar',[
+        {x:names,y:stores.map(s=>s.revenue||0),name:'实收',type:'bar',marker:{color:'#5B8FF9'}},
+        {x:names,y:stores.map(s=>s.real_profit||0),name:'门店毛利',type:'bar',marker:{color:'#5AD8A6'}}
+    ],{...plotlyLayout,barmode:'group',xaxis:{...plotlyLayout.xaxis,tickangle:-45},margin:{l:50,r:20,t:20,b:100}},plotlyCfg);
 
-    let html = '<table><tr><th>门店</th><th>单量</th><th>营收</th><th>真实毛利</th><th>推广费</th><th>毛利率(%)</th><th>负毛利占比</th></tr>';
-    stores.forEach(s => {
-        const rev = s.revenue || 0, rp = s.real_profit || 0;
-        const mg = rev > 0 ? (rp / rev * 100).toFixed(1) : '0.0';
-        const np = s.order_cnt > 0 ? ((s.neg_cnt || 0) / s.order_cnt * 100).toFixed(1) : '0.0';
-        html += '<tr><td>' + s.store_name + '</td><td>' + (s.order_cnt||0).toLocaleString() + '</td><td>¥' + rev.toLocaleString(undefined,{maximumFractionDigits:0}) + '</td><td>¥' + rp.toLocaleString(undefined,{maximumFractionDigits:0}) + '</td><td>¥' + ((s.promo_fee||0).toFixed(0)) + '</td><td>' + mg + '%</td><td><span class="badge badge-' + (np > 25 ? 'warn' : 'ok') + '">' + np + '%</span></td></tr>';
+    let h='<table><tr><th>门店</th><th>单量</th><th>实收</th><th>门店毛利</th><th>抽佣毛利</th><th>毛利率</th><th>实收客单</th><th>配送成本</th><th>负毛利</th></tr>';
+    stores.forEach(s=>{
+        const rev=s.revenue||0, rp=s.real_profit||0, cc=s.commission_cost||0;
+        const mg=rev>0?(cc/rev*100).toFixed(1):'0.0';
+        const aov=rev>0?(rev/(s.order_cnt||1)).toFixed(1):'0.0';
+        const dc=(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt).toFixed(1):'0.0';
+        const np=(s.order_cnt||0)>0?((s.neg_cnt||0)/s.order_cnt*100).toFixed(1):'0.0';
+        h+='<tr><td>'+short(s.store_name)+'</td><td>'+(s.order_cnt||0).toLocaleString()+'</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cc)+'</td><td>'+mg+'%</td><td>¥'+aov+'</td><td>¥'+dc+'</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
     });
-    html += '</table>';
-    document.getElementById('storeTable').innerHTML = html;
+    h+='</table>';
+    document.getElementById('storeTable').innerHTML=h;
 }
 
-// --- Channel Tab ---
+// ============ CHANNEL TAB ============
 function renderChannel(data) {
-    const channels = groupBy(data, ['channel']);
-    const totalOrders = channels.reduce((s, c) => s + c.order_cnt, 0);
-    channels.forEach(c => { c.order_pct = totalOrders > 0 ? (c.order_cnt / totalOrders * 100).toFixed(1) : '0.0'; });
+    const ch = groupBy(data,['channel']);
+    const to = ch.reduce((s,c)=>s+c.order_cnt,0);
+    ch.forEach(c=>{c.pct=to>0?(c.order_cnt/to*100).toFixed(1):'0.0';});
 
-    Plotly.newPlot('chartChannelPie', [{
-        values: channels.map(c => c.order_cnt), labels: channels.map(c => c.channel),
-        type: 'pie', hole: 0.45,
-        marker: { colors: ['#5B8FF9','#F6BD16','#5AD8A6','#E86452'] },
-        textinfo: 'label+percent', textposition: 'outside'
-    }], { ...plotlyLayout, height: chartHSmall, showlegend: false }, plotlyCfg);
+    Plotly.newPlot('chartChannelPie',[{values:ch.map(c=>c.order_cnt),labels:ch.map(c=>c.channel),type:'pie',hole:0.45,marker:{colors:['#5B8FF9','#F6BD16','#5AD8A6','#E86452']},textinfo:'label+percent',textposition:'outside'}],{...plotlyLayout,height:chartHS,showlegend:false},plotlyCfg);
 
-    const chRev = [...channels].sort((a,b) => b.revenue - a.revenue);
-    Plotly.newPlot('chartChannelRev', [{
-        y: chRev.map(c => c.channel), x: chRev.map(c => c.revenue),
-        type: 'bar', orientation: 'h', marker: { color: '#5B8FF9' }
-    }], { ...plotlyLayout, height: chartHSmall, xaxis: { ...plotlyLayout.xaxis, title: '营收(元)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
+    const chRev=[...ch].sort((a,b)=>b.revenue-a.revenue);
+    Plotly.newPlot('chartChannelRev',[{y:chRev.map(c=>c.channel),x:chRev.map(c=>c.revenue),type:'bar',orientation:'h',marker:{color:'#5B8FF9'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'实收(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
-    const chProfit = [...channels].sort((a,b) => b.real_profit - a.real_profit);
-    Plotly.newPlot('chartChannelProfit', [{
-        y: chProfit.map(c => c.channel), x: chProfit.map(c => c.real_profit),
-        type: 'bar', orientation: 'h', marker: { color: '#5AD8A6' }
-    }], { ...plotlyLayout, height: chartHSmall, xaxis: { ...plotlyLayout.xaxis, title: '真实毛利(元)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
+    const chComm=[...ch].sort((a,b)=>b.commission_cost-a.commission_cost);
+    Plotly.newPlot('chartChannelComm',[{y:chComm.map(c=>c.channel),x:chComm.map(c=>c.commission_cost),type:'bar',orientation:'h',marker:{color:'#FF9F43'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'抽佣毛利(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
-    const chMargin = [...channels].sort((a,b) => (b.real_profit/(b.revenue||1)) - (a.real_profit/(a.revenue||1)));
-    Plotly.newPlot('chartChannelMargin', [{
-        y: chMargin.map(c => c.channel), x: chMargin.map(c => c.revenue > 0 ? (c.real_profit/c.revenue*100).toFixed(1) : 0),
-        type: 'bar', orientation: 'h', marker: { color: '#F6BD16' }
-    }], { ...plotlyLayout, height: chartHSmall, xaxis: { ...plotlyLayout.xaxis, title: '毛利率(%)' }, margin: { l: 100, r: 20, t: 10, b: 40 } }, plotlyCfg);
+    const chMarg=[...ch].sort((a,b)=>(b.commission_cost/(b.revenue||1))-(a.commission_cost/(a.revenue||1)));
+    Plotly.newPlot('chartChannelMargin',[{y:chMarg.map(c=>c.channel),x:chMarg.map(c=>c.revenue>0?(c.commission_cost/c.revenue*100).toFixed(1):0),type:'bar',orientation:'h',marker:{color:'#F6BD16'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'毛利率(%)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
-    let html = '<table><tr><th>渠道</th><th>单量</th><th>占比(%)</th><th>营收</th><th>真实毛利</th><th>推广费</th><th>毛利率(%)</th><th>负毛利占比</th></tr>';
-    channels.forEach(c => {
-        const rev = c.revenue || 0, rp = c.real_profit || 0;
-        const mg = rev > 0 ? (rp / rev * 100).toFixed(1) : '0.0';
-        const np = c.order_cnt > 0 ? ((c.neg_cnt||0) / c.order_cnt * 100).toFixed(1) : '0.0';
-        html += '<tr><td>' + c.channel + '</td><td>' + c.order_cnt.toLocaleString() + '</td><td>' + c.order_pct + '%</td><td>¥' + rev.toLocaleString(undefined,{maximumFractionDigits:0}) + '</td><td>¥' + rp.toLocaleString(undefined,{maximumFractionDigits:0}) + '</td><td>¥' + ((c.promo_fee||0).toFixed(0)) + '</td><td>' + mg + '%</td><td><span class="badge badge-' + (np > 25 ? 'warn' : 'ok') + '">' + np + '%</span></td></tr>';
+    let h='<table><tr><th>渠道</th><th>单量</th><th>占比(%)</th><th>实收</th><th>门店毛利</th><th>抽佣毛利</th><th>毛利率(%)</th><th>负毛利占比</th></tr>';
+    ch.forEach(c=>{
+        const rev=c.revenue||0, rp=c.real_profit||0, cc=c.commission_cost||0;
+        const mg=rev>0?(cc/rev*100).toFixed(1):'0.0';
+        const np=c.order_cnt>0?((c.neg_cnt||0)/c.order_cnt*100).toFixed(1):'0.0';
+        h+='<tr><td>'+c.channel+'</td><td>'+c.order_cnt.toLocaleString()+'</td><td>'+c.pct+'%</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cc)+'</td><td>'+mg+'%</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
     });
-    html += '</table>';
-    document.getElementById('channelTable').innerHTML = html;
+    h+='</table>';
+    document.getElementById('channelTable').innerHTML=h;
 }
 
-// --- Neg Tab ---
+// ============ NEG TAB ============
 function renderNeg(data) {
-    const storeSet = new Set(), channelSet = new Set();
-    const matrix = {};
-    data.forEach(r => {
-        storeSet.add(r.store_name);
-        channelSet.add(r.channel);
-        const k = r.store_name + '||' + r.channel;
-        if (!matrix[k]) matrix[k] = { sum: 0, cnt: 0 };
-        matrix[k].sum += r.order_cnt > 0 ? (r.neg_cnt / r.order_cnt * 100) : 0;
-        matrix[k].cnt += 1;
-    });
-    const stores = [...storeSet].sort();
-    const channels = [...channelSet].sort();
-    const z = stores.map(s => channels.map(c => {
-        const v = matrix[s+'||'+c]; return v ? Math.round(v.sum / v.cnt * 10)/10 : 0;
-    }));
-    Plotly.newPlot('chartNegHeatmap', [{
-        z: z, x: channels, y: stores,
-        type: 'heatmap',
-        colorscale: [[0,'#5AD8A6'],[0.5,'#F6BD16'],[1,'#E86452']],
-        hovertemplate: '%{y} | %{x}<br>负毛利占比: %{z}%<extra></extra>'
-    }], { ...plotlyLayout, height: Math.max(400, stores.length*28), xaxis: { ...plotlyLayout.xaxis, side: 'top' }, margin: { l: 120, r: 20, t: 60, b: 40 } }, plotlyCfg);
+    const sS=new Set(),cS=new Set(),mx={};
+    data.forEach(r=>{sS.add(r.store_name);cS.add(r.channel);const k=r.store_name+'||'+r.channel;if(!mx[k])mx[k]={s:0,c:0};mx[k].s+=r.order_cnt>0?(r.neg_cnt/r.order_cnt*100):0;mx[k].c+=1;});
+    const sL=[...sS].sort(),cL=[...cS].sort();
+    const z=sL.map(s=>cL.map(c=>{const v=mx[s+'||'+c];return v?Math.round(v.s/v.c*10)/10:0;}));
+    Plotly.newPlot('chartNegHeatmap',[{z:z,x:cL,y:sL.map(s=>short(s)),type:'heatmap',colorscale:[[0,'#5AD8A6'],[0.5,'#F6BD16'],[1,'#E86452']],hovertemplate:'%{y} | %{x}<br>负毛利占比: %{z}%<extra></extra>'}],{...plotlyLayout,height:Math.max(350,sL.length*26),xaxis:{...plotlyLayout.xaxis,side:'top'},margin:{l:100,r:20,t:50,b:30}},plotlyCfg);
 
-    const storeData = groupBy(data, ['store_name']);
-    storeData.forEach(s => { s.neg_pct = s.order_cnt > 0 ? (s.neg_cnt / s.order_cnt * 100) : 0; });
-    storeData.sort((a,b) => b.neg_pct - a.neg_pct);
-    let html = '<table><tr><th>排名</th><th>门店</th><th>总单量</th><th>负毛利单数</th><th>负毛利占比</th><th>真实毛利</th></tr>';
-    storeData.slice(0,10).forEach((s, i) => {
-        html += '<tr><td>' + (i+1) + '</td><td>' + s.store_name + '</td><td>' + s.order_cnt.toLocaleString() + '</td><td>' + (s.neg_cnt||0) + '</td><td><span class="badge badge-' + (s.neg_pct > 25 ? 'warn' : 'ok') + '">' + s.neg_pct.toFixed(1) + '%</span></td><td>¥' + (s.real_profit||0).toLocaleString(undefined,{maximumFractionDigits:0}) + '</td></tr>';
+    const sd=groupBy(data,['store_name']);
+    sd.forEach(s=>{s.np=s.order_cnt>0?(s.neg_cnt/s.order_cnt*100):0;});
+    sd.sort((a,b)=>b.np-a.np);
+    let h='<table><tr><th>排名</th><th>门店</th><th>总单量</th><th>负毛利单数</th><th>负毛利占比</th><th>门店毛利</th></tr>';
+    sd.slice(0,10).forEach((s,i)=>{
+        h+='<tr><td>'+(i+1)+'</td><td>'+short(s.store_name)+'</td><td>'+s.order_cnt.toLocaleString()+'</td><td>'+(s.neg_cnt||0)+'</td><td><span class="badge badge-'+(s.np>25?'warn':'ok')+'">'+s.np.toFixed(1)+'%</span></td><td>'+fmtY(s.real_profit||0)+'</td></tr>';
     });
-    html += '</table>';
-    document.getElementById('negTable').innerHTML = html;
+    h+='</table>';
+    document.getElementById('negTable').innerHTML=h;
 }
 
-// --- Promo Tab ---
-function renderPromo(pdata) {
-    if (!pdata.length) {
-        document.getElementById('chartPromoBar').innerHTML = '<p style="color:var(--text-dim);padding:40px;text-align:center;">暂无推广数据</p>';
-        document.getElementById('promoTable').innerHTML = '';
-        return;
-    }
-    const storeMap = {};
-    pdata.forEach(r => { storeMap[r.store_name] = (storeMap[r.store_name] || 0) + (r.promo_fee || 0); });
-    const sorted = Object.entries(storeMap).sort((a,b) => b[1] - a[1]).slice(0,15);
-    Plotly.newPlot('chartPromoBar', [{
-        y: sorted.map(s => s[0]), x: sorted.map(s => s[1]),
-        type: 'bar', orientation: 'h',
-        marker: { color: sorted.map(s => s[1] > 100 ? '#E86452' : s[1] > 50 ? '#F6BD16' : '#5AD8A6') }
-    }], { ...plotlyLayout, height: Math.max(380, sorted.length*28), xaxis: { ...plotlyLayout.xaxis, title: '推广费(元)' }, margin: { l: 120, r: 20, t: 10, b: 40 } }, plotlyCfg);
-
-    const chMap = {}, chStores = {};
-    pdata.forEach(r => {
-        chMap[r.channel] = (chMap[r.channel] || 0) + (r.promo_fee || 0);
-        if (!chStores[r.channel]) chStores[r.channel] = new Set();
-        chStores[r.channel].add(r.store_name);
-    });
-    let html = '<table><tr><th>渠道</th><th>推广费合计</th><th>投放门店数</th></tr>';
-    Object.entries(chMap).sort((a,b) => b[1]-a[1]).forEach(([ch,fee]) => {
-        html += '<tr><td>' + ch + '</td><td>¥' + fee.toFixed(2) + '</td><td>' + chStores[ch].size + '</td></tr>';
-    });
-    html += '</table>';
-    document.getElementById('promoTable').innerHTML = html;
+// ============ PROMO TAB ============
+function renderPromo(pd) {
+    if(!pd.length){document.getElementById('chartPromoBar').innerHTML='<p style="color:var(--text-dim);padding:30px;text-align:center;">暂无推广数据</p>';document.getElementById('promoTable').innerHTML='';return;}
+    const sm={};pd.forEach(r=>{sm[r.store_name]=(sm[r.store_name]||0)+(r.promo_fee||0);});
+    const so=Object.entries(sm).sort((a,b)=>b[1]-a[1]).slice(0,15);
+    Plotly.newPlot('chartPromoBar',[{y:so.map(s=>short(s[0])),x:so.map(s=>s[1]),type:'bar',orientation:'h',marker:{color:so.map(s=>s[1]>100?'#E86452':s[1]>50?'#F6BD16':'#5AD8A6')}}],{...plotlyLayout,height:Math.max(340,so.length*26),xaxis:{...plotlyLayout.xaxis,title:'推广费(元)'},margin:{l:100,r:20,t:10,b:40}},plotlyCfg);
+    const cm={},cs={};
+    pd.forEach(r=>{cm[r.channel]=(cm[r.channel]||0)+(r.promo_fee||0);if(!cs[r.channel])cs[r.channel]=new Set();cs[r.channel].add(r.store_name);});
+    let h='<table><tr><th>渠道</th><th>推广费合计</th><th>投放门店数</th></tr>';
+    Object.entries(cm).sort((a,b)=>b[1]-a[1]).forEach(([ch,fee])=>{h+='<tr><td>'+ch+'</td><td>¥'+fee.toFixed(2)+'</td><td>'+cs[ch].size+'</td></tr>';});
+    h+='</table>';
+    document.getElementById('promoTable').innerHTML=h;
 }
 
-// --- Refresh ---
+// ============ REFRESH ============
 function refresh() {
-    const data = getFilteredData();
-    const pf = getFilteredPromo();
-    renderKPIs(data);
-    renderStore(data);
-    renderChannel(data);
-    renderNeg(data);
-    renderPromo(pf);
+    const data=getFiltered(), pf=getFilteredPromo();
+    renderKPIs(data); renderStore(data); renderChannel(data); renderNeg(data); renderPromo(pf);
 }
 
-// --- Init ---
+// ============ INIT ============
 initFilters();
 document.getElementById('updateTime').textContent = '数据更新: ' + allDates[allDates.length - 1];
-dateFrom.addEventListener('change', refresh);
-dateTo.addEventListener('change', refresh);
 refresh();
 </script>
 </body>
