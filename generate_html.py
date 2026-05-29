@@ -16,11 +16,19 @@ OUTPUT = os.path.join(BASE, 'dashboard.html')
 df = pd.read_excel(os.path.join(WAREHOUSE, 'daily_store_channel_profit.xlsx'))
 df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
 
+# 仪表盘只取最近90天，warehouse原始文件保持全量
+df['_date_sort'] = pd.to_datetime(df['日期'])
+max_date = df['_date_sort'].max()
+cutoff = max_date - pd.Timedelta(days=90)
+df = df[df['_date_sort'] >= cutoff].drop(columns=['_date_sort'])
+
 promo = None
 promo_path = os.path.join(WAREHOUSE, 'promo_daily.xlsx')
 if os.path.exists(promo_path):
     promo = pd.read_excel(promo_path)
     promo['日期'] = pd.to_datetime(promo['日期']).dt.strftime('%Y-%m-%d')
+    promo['_date_sort'] = pd.to_datetime(promo['日期'])
+    promo = promo[promo['_date_sort'] >= cutoff].drop(columns=['_date_sort'])
 
 def clean(records):
     out = []
@@ -176,8 +184,8 @@ tr:hover td { background:rgba(108,142,242,0.05); }
     .kpi-value { font-size:16px; }
     .kpi-card { padding:8px; }
 }
-@media (min-width:1024px) { .kpi-grid { grid-template-columns:repeat(4,1fr); } }
-@media (min-width:769px) and (max-width:1023px) { .kpi-grid { grid-template-columns:repeat(4,1fr); } }
+@media (min-width:1024px) { .kpi-grid { grid-template-columns:repeat(5,1fr); } }
+@media (min-width:769px) and (max-width:1023px) { .kpi-grid { grid-template-columns:repeat(3,1fr); } }
 </style>
 </head>
 <body>
@@ -234,15 +242,14 @@ tr:hover td { background:rgba(108,142,242,0.05); }
 
     <div class="tab-nav-wrap">
         <div class="tab-nav">
-            <button class="tab-btn active" onclick="switchTab('store',this)">门店经营</button>
+            <button class="tab-btn active" onclick="switchTab('store',this)">门店数据</button>
             <button class="tab-btn" onclick="switchTab('channel',this)">渠道分析</button>
-            <button class="tab-btn" onclick="switchTab('neg',this)">负毛利分析</button>
-            <button class="tab-btn" onclick="switchTab('promo',this)">推广分析</button>
+            <button class="tab-btn" onclick="switchTab('time',this)">时间分析</button>
         </div>
     </div>
 
     <div id="tab-store" class="tab-content active">
-        <div class="chart-section"><h3>各门店实收 vs 门店毛利</h3><div id="chartStoreBar"></div></div>
+        <div class="chart-section"><h3>各门店单量 vs 抽佣毛利</h3><div id="chartStoreBar"></div></div>
         <div class="chart-section"><h3>门店明细</h3><div class="table-scroll" id="storeTable"></div></div>
     </div>
     <div id="tab-channel" class="tab-content">
@@ -256,13 +263,9 @@ tr:hover td { background:rgba(108,142,242,0.05); }
         </div>
         <div class="chart-section"><h3>渠道明细</h3><div class="table-scroll" id="channelTable"></div></div>
     </div>
-    <div id="tab-neg" class="tab-content">
-        <div class="chart-section"><h3>门店 × 渠道 负毛利占比热力图</h3><div id="chartNegHeatmap"></div></div>
-        <div class="chart-section"><h3>负毛利占比 TOP 门店</h3><div class="table-scroll" id="negTable"></div></div>
-    </div>
-    <div id="tab-promo" class="tab-content">
-        <div class="chart-section"><h3>各门店推广费排名</h3><div id="chartPromoBar"></div></div>
-        <div class="chart-section"><h3>渠道推广汇总</h3><div class="table-scroll" id="promoTable"></div></div>
+    <div id="tab-time" class="tab-content">
+        <div class="chart-section"><h3>每日单量 & 抽佣毛利趋势</h3><div id="chartTimeTrend"></div></div>
+        <div class="chart-section"><h3>每日明细</h3><div class="table-scroll" id="timeTable"></div></div>
     </div>
 </div>
 
@@ -522,25 +525,74 @@ function getFilteredPromo() {
     return promoData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(r['store_name']));
 }
 
+// ============ 环比 ============
+function getPrevData(data) {
+    const from = dParse(dateFrom), to = dParse(dateTo);
+    const days = Math.round((to - from) / (24*60*60*1000)) + 1;
+    const prevEnd = new Date(from); prevEnd.setDate(prevEnd.getDate() - 1);
+    const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
+    const pf = dFmt(prevStart), pt = dFmt(prevEnd);
+    return rawData.filter(r =>
+        r['日期'] >= pf && r['日期'] <= pt &&
+        selectedStores.includes(r['store_name']) &&
+        selectedChannels.includes(r['channel'])
+    );
+}
+
+function deltaStr(curr, prev, isGoodUp) {
+    if (prev === 0) return { txt: '--', cls: '' };
+    const pct = ((curr - prev) / prev * 100).toFixed(1);
+    const up = pct > 0;
+    const sign = up ? '↑' : '↓';
+    const cls = up ? (isGoodUp ? 'green' : 'red') : (isGoodUp ? 'red' : 'green');
+    return { txt: sign + Math.abs(pct) + '%', cls: cls };
+}
+
 // ============ KPIs ============
 function renderKPIs(data) {
     const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'real_profit');
     const cc=sum(data,'commission_fee'), cp=sum(data,'commission_profit'), nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
-    const df2=sum(data,'delivery_fee'),doc=sum(data,'delivery_order_cnt');
+    const df2=sum(data,'delivery_fee'), doc=sum(data,'delivery_order_cnt');
     const margin=rev>0?(cp/rev*100).toFixed(1):0;
     const negPct=ord>0?(nc/ord*100).toFixed(1):0;
     const aov=ord>0?(rev/ord).toFixed(1):0;
     const adc=doc>0?(df2/doc).toFixed(1):0;
     const ngCls=negPct>25?'red':'green';
+
+    // 环比
+    const prev = getPrevData(data);
+    const pOrd=sum(prev,'order_cnt'), pRev=sum(prev,'revenue'), pGp=sum(prev,'real_profit');
+    const pCc=sum(prev,'commission_fee'), pCp=sum(prev,'commission_profit'), pPf=sum(prev,'promo_fee');
+    const pDf=sum(prev,'delivery_fee'), pDoc=sum(prev,'delivery_order_cnt');
+    const pNeg=sum(prev,'neg_cnt');
+    const pAov = pOrd > 0 ? (pRev / pOrd) : 0;
+    const pAdc = pDoc > 0 ? (pDf / pDoc) : 0;
+    const pNegPct = pOrd > 0 ? (pNeg / pOrd * 100) : 0;
+    const pMargin = pRev > 0 ? (pCp / pRev * 100) : 0;
+
+    // 环比：上升标红↓，下降标绿↑（统一规则）
+    const dOrd = deltaStr(ord, pOrd, false);
+    const dRev = deltaStr(rev, pRev, false);
+    const dGp = deltaStr(gp, pGp, false);
+    const dPf = deltaStr(pf, pPf, false);
+    const dCc = deltaStr(cc, pCc, false);
+    const dCp = deltaStr(cp, pCp, false);
+    const dMarg = deltaStr(parseFloat(margin), pMargin, false);
+    const dAov = deltaStr(parseFloat(aov), pAov, false);
+    const dNeg = deltaStr(parseFloat(negPct), pNegPct, false);
+    const dAdc = deltaStr(parseFloat(adc), pAdc, false);
+
     document.getElementById('kpiGrid').innerHTML =
-        '<div class="kpi-card blue"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div></div>'+
-        '<div class="kpi-card accent"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div></div>'+
-        '<div class="kpi-card green"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--red)">-¥'+pf.toFixed(0)+' 推广</div></div>'+
-        '<div class="kpi-card orange"><div class="kpi-label">平台抽佣</div><div class="kpi-value">'+fmtY(cc)+'</div></div>'+
-        '<div class="kpi-card green"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div></div>'+
-        '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div></div>'+
-        '<div class="kpi-card accent"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div></div>'+
-        '<div class="kpi-card '+ngCls+'"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub">单均配送 ¥'+adc+'</div></div>';
+        '<div class="kpi-card blue"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div><div class="kpi-sub" style="color:var(--'+dOrd.cls+')">'+dOrd.txt+'</div></div>'+
+        '<div class="kpi-card accent"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div><div class="kpi-sub" style="color:var(--'+dRev.cls+')">'+dRev.txt+'</div></div>'+
+        '<div class="kpi-card green"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--'+dGp.cls+')">'+dGp.txt+'</div></div>'+
+        '<div class="kpi-card red"><div class="kpi-label">推广</div><div class="kpi-value">¥'+(pf.toFixed(0))+'</div><div class="kpi-sub" style="color:var(--'+dPf.cls+')">'+dPf.txt+'</div></div>'+
+        '<div class="kpi-card orange"><div class="kpi-label">抽佣</div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-sub" style="color:var(--'+dCc.cls+')">'+dCc.txt+'</div></div>'+
+        '<div class="kpi-card green"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-sub" style="color:var(--'+dCp.cls+')">'+dCp.txt+'</div></div>'+
+        '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div><div class="kpi-sub" style="color:var(--'+dMarg.cls+')">'+dMarg.txt+'</div></div>'+
+        '<div class="kpi-card accent"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div><div class="kpi-sub" style="color:var(--'+dAov.cls+')">'+dAov.txt+'</div></div>'+
+        '<div class="kpi-card '+ngCls+'"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub" style="color:var(--'+dNeg.cls+')">'+dNeg.txt+'</div></div>'+
+        '<div class="kpi-card orange"><div class="kpi-label">单均配送</div><div class="kpi-value">¥'+adc+'</div><div class="kpi-sub" style="color:var(--'+dAdc.cls+')">'+dAdc.txt+'</div></div>';
 }
 
 // ============ STORE TAB ============
@@ -548,10 +600,15 @@ function renderStore(data) {
     const stores = groupBy(data,['store_name']);
     stores.sort((a,b)=>b.revenue-a.revenue);
     const names=stores.map(s=>short(s.store_name));
+    // 并列柱状图：蓝=单量，橙=抽佣毛利，无网格线
     Plotly.newPlot('chartStoreBar',[
-        {x:names,y:stores.map(s=>s.revenue||0),name:'实收',type:'bar',marker:{color:'#5B8FF9'}},
-        {x:names,y:stores.map(s=>s.real_profit||0),name:'门店毛利',type:'bar',marker:{color:'#5AD8A6'}}
-    ],{...plotlyLayout,barmode:'group',xaxis:{...plotlyLayout.xaxis,tickangle:-45},margin:{l:50,r:20,t:20,b:100}},plotlyCfg);
+        {x:names,y:stores.map(s=>s.order_cnt||0),name:'单量',type:'bar',marker:{color:'#5B8FF9'}},
+        {x:names,y:stores.map(s=>s.commission_profit||0),name:'抽佣毛利',type:'bar',marker:{color:'#FF9F43'}}
+    ],{...plotlyLayout,barmode:'group',
+        xaxis:{...plotlyLayout.xaxis,tickangle:-45},
+        yaxis:{title:'',gridcolor:'rgba(0,0,0,0)',zerolinecolor:'#2a2d3a'},
+        margin:{l:50,r:20,t:20,b:100}
+    },plotlyCfg);
 
     let h='<table><tr><th>门店</th><th>单量</th><th>实收</th><th>门店毛利</th><th>平台抽佣</th><th>抽佣毛利</th><th>毛利率</th><th>实收客单</th><th>配送成本</th><th>负毛利</th></tr>';
     stores.forEach(s=>{
@@ -627,10 +684,55 @@ function renderPromo(pd) {
     document.getElementById('promoTable').innerHTML=h;
 }
 
+// ============ TIME ANALYSIS TAB ============
+function renderTimeAnalysis(data) {
+    const byDate = groupBy(data, ['日期']);
+    byDate.sort((a,b) => a.日期.localeCompare(b.日期));
+    const dates = byDate.map(d => d.日期);
+    const orders = byDate.map(d => d.order_cnt || 0);
+    const profits = byDate.map(d => d.commission_profit || 0);
+
+    // Linear regression trend lines
+    const n = dates.length;
+    function trendLine(vals) {
+        if (n < 2) return { x: dates, y: vals.map(() => null) };
+        let sx=0,sy=0,sxy=0,sxx=0;
+        for (let i=0;i<n;i++) { sx+=i; sy+=vals[i]; sxy+=i*vals[i]; sxx+=i*i; }
+        const slope = (n*sxy - sx*sy) / (n*sxx - sx*sx);
+        const intercept = (sy - slope*sx) / n;
+        return { x: dates, y: vals.map((_,i) => Math.round((slope*i+intercept)*100)/100) };
+    }
+    const tOrders = trendLine(orders);
+    const tProfits = trendLine(profits);
+
+    // 并列柱状图：蓝=单量，橙=抽佣毛利+虚线趋势，无网格线
+    Plotly.newPlot('chartTimeTrend', [
+        { x: dates, y: orders, name: '单量', type: 'bar', marker: {color:'#5B8FF9'} },
+        { x: dates, y: profits, name: '抽佣毛利', type: 'bar', marker: {color:'#FF9F43'} },
+        { x: tProfits.x, y: tProfits.y, name: '毛利趋势', type: 'scatter', mode: 'lines', line: {color:'#FF9F43',width:2,dash:'dot'}, showlegend: true }
+    ], {
+        ...plotlyLayout, height: chartH + 40, barmode: 'group',
+        xaxis: { ...plotlyLayout.xaxis, title: '日期', type: 'date', tickformat: '%m-%d', dtick: 'D1' },
+        yaxis: { title: '', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a' },
+        legend: { orientation: 'h', y: 1.1, font: {color:'#e8eaf0',size:11} },
+        margin: { l: 50, r: 10, t: 20, b: 50 }
+    }, plotlyCfg);
+
+    // 每日明细表
+    let h='<table><tr><th>日期</th><th>单量</th><th>实收</th><th>门店毛利</th><th>抽佣</th><th>抽佣毛利</th><th>毛利率</th></tr>';
+    byDate.forEach(d=>{
+        const rev=d.revenue||0, rp=d.real_profit||0, cf=d.commission_fee||0, cp=d.commission_profit||0;
+        const mg=rev>0?(cp/rev*100).toFixed(1):'0.0';
+        h+='<tr><td>'+d.日期+'</td><td>'+(d.order_cnt||0).toLocaleString()+'</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cf)+'</td><td>'+fmtY(cp)+'</td><td>'+mg+'%</td></tr>';
+    });
+    h+='</table>';
+    document.getElementById('timeTable').innerHTML=h;
+}
+
 // ============ REFRESH ============
 function refresh() {
     const data=getFiltered(), pf=getFilteredPromo();
-    renderKPIs(data); renderStore(data); renderChannel(data); renderNeg(data); renderPromo(pf);
+    renderKPIs(data); renderStore(data); renderChannel(data); renderTimeAnalysis(data);
 }
 
 // ============ INIT ============
