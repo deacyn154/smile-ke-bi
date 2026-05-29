@@ -80,6 +80,7 @@ html = '''<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>微笑客经营看板</title>
 <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 :root {
     --bg: #0f1117; --card: #1a1d29; --border: #2a2d3a;
@@ -186,10 +187,32 @@ tr:hover td { background:rgba(108,142,242,0.05); }
 }
 @media (min-width:1024px) { .kpi-grid { grid-template-columns:repeat(5,1fr); } }
 @media (min-width:769px) and (max-width:1023px) { .kpi-grid { grid-template-columns:repeat(3,1fr); } }
+/* === Login Overlay === */
+.login-overlay { position:fixed; inset:0; background:var(--bg); z-index:9999; display:flex; align-items:center; justify-content:center; }
+.login-box { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:32px 28px; width:340px; max-width:90vw; text-align:center; }
+.login-box h2 { font-size:20px; margin-bottom:4px; }
+.login-box .login-sub { color:var(--text-dim); font-size:12px; margin-bottom:20px; }
+.login-box input { width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px; outline:none; text-align:center; }
+.login-box input:focus { border-color:var(--accent); }
+.login-box .login-err { color:var(--red); font-size:12px; margin-top:10px; min-height:18px; }
+.login-box button { margin-top:12px; width:100%; padding:10px; border-radius:10px; border:none; background:var(--accent); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
+.login-box button:hover { opacity:0.9; }
+.export-btn { padding:4px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text-dim); font-size:11px; cursor:pointer; float:right; }
+.export-btn:hover { border-color:var(--accent); color:var(--text); }
 </style>
 </head>
 <body>
-<div class="dashboard">
+<div class="login-overlay" id="loginOverlay">
+    <div class="login-box">
+        <h2>🔐 微笑客经营看板</h2>
+        <div class="login-sub">请输入访问密码</div>
+        <input type="password" id="loginPwd" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()">
+        <button onclick="doLogin()">进入看板</button>
+        <div class="login-err" id="loginErr"></div>
+    </div>
+</div>
+
+<div class="dashboard" id="dashboard" style="display:none;">
     <div class="header">
         <h1>微笑客经营看板</h1>
         <div class="update-time" id="updateTime"></div>
@@ -250,7 +273,7 @@ tr:hover td { background:rgba(108,142,242,0.05); }
 
     <div id="tab-store" class="tab-content active">
         <div class="chart-section"><h3>各门店单量 vs 抽佣毛利</h3><div id="chartStoreBar"></div></div>
-        <div class="chart-section"><h3>门店明细</h3><div class="table-scroll" id="storeTable"></div></div>
+        <div class="chart-section"><h3>门店明细 <button class="export-btn" onclick="exportTable('storeTable','门店明细')">📥 导出Excel</button></h3><div class="table-scroll" id="storeTable"></div></div>
     </div>
     <div id="tab-channel" class="tab-content">
         <div class="row">
@@ -261,15 +284,39 @@ tr:hover td { background:rgba(108,142,242,0.05); }
             <div class="chart-section"><h3>各渠道实收</h3><div id="chartChannelRev"></div></div>
             <div class="chart-section"><h3>各渠道平台抽佣</h3><div id="chartChannelComm"></div></div>
         </div>
-        <div class="chart-section"><h3>渠道明细</h3><div class="table-scroll" id="channelTable"></div></div>
+        <div class="chart-section"><h3>渠道明细 <button class="export-btn" onclick="exportTable('channelTable','渠道明细')">📥 导出Excel</button></h3><div class="table-scroll" id="channelTable"></div></div>
     </div>
     <div id="tab-time" class="tab-content">
         <div class="chart-section"><h3>每日单量 & 抽佣毛利趋势</h3><div id="chartTimeTrend"></div></div>
-        <div class="chart-section"><h3>每日明细</h3><div class="table-scroll" id="timeTable"></div></div>
+        <div class="chart-section"><h3>每日明细 <button class="export-btn" onclick="exportTable('timeTable','每日明细')">📥 导出Excel</button></h3><div class="table-scroll" id="timeTable"></div></div>
     </div>
 </div>
 
 <script>
+// ============ LOGIN ============
+const PWD_HASH = '6d27e63b678c68ef608b4d99e5c80a1c9fd85b4b9ba02eaa178adf715205fa0c';
+(async function(){
+    if(sessionStorage.getItem('_auth')){ document.getElementById('loginOverlay').style.display='none'; document.getElementById('dashboard').style.display='block'; initDashboard(); return; }
+    document.getElementById('dashboard').style.display='none';
+})();
+async function sha256(m){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(m));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function doLogin(){
+    const pwd=document.getElementById('loginPwd').value;
+    if(!pwd){document.getElementById('loginErr').textContent='请输入密码';return;}
+    const h=await sha256(pwd);
+    if(h===PWD_HASH){sessionStorage.setItem('_auth','1');document.getElementById('loginOverlay').style.display='none';document.getElementById('dashboard').style.display='block';initDashboard();}
+    else{document.getElementById('loginErr').textContent='密码错误，请重试';document.getElementById('loginPwd').value='';}
+}
+
+// ============ EXPORT ============
+function exportTable(tableId, filename) {
+    const table = document.getElementById(tableId).querySelector('table');
+    if(!table) return;
+    const wb = XLSX.utils.table_to_book(table, {sheet:'明细'});
+    XLSX.writeFile(wb, filename + '.xlsx');
+}
+
+
 // ============ DATA ============
 const rawData = ''' + data_json + ''';
 const promoData = ''' + promo_json + ''';
@@ -602,14 +649,15 @@ function renderStore(data) {
     const stores = groupBy(data,['store_name']);
     stores.sort((a,b)=>b.revenue-a.revenue);
     const names=stores.map(s=>short(s.store_name));
-    // 并列柱状图：蓝=单量，橙=抽佣毛利，无网格线
+    // 双Y轴并列：offsetgroup让两个不同Y轴的bar分组并排
     Plotly.newPlot('chartStoreBar',[
-        {x:names,y:stores.map(s=>s.order_cnt||0),name:'单量',type:'bar',marker:{color:'#5B8FF9'}},
-        {x:names,y:stores.map(s=>s.commission_profit||0),name:'抽佣毛利',type:'bar',marker:{color:'#FF9F43'}}
+        {x:names,y:stores.map(s=>s.order_cnt||0),name:'单量',type:'bar',marker:{color:'#5B8FF9'},offsetgroup:0},
+        {x:names,y:stores.map(s=>s.commission_profit||0),name:'抽佣毛利',type:'bar',marker:{color:'#FF9F43'},yaxis:'y2',offsetgroup:1}
     ],{...plotlyLayout,barmode:'group',
         xaxis:{...plotlyLayout.xaxis,tickangle:-45},
-        yaxis:{title:'',gridcolor:'rgba(0,0,0,0)',zerolinecolor:'#2a2d3a'},
-        margin:{l:50,r:20,t:20,b:100}
+        yaxis:{title:'单量',gridcolor:'rgba(0,0,0,0)',zerolinecolor:'#2a2d3a',rangemode:'tozero'},
+        yaxis2:{title:'抽佣毛利(元)',overlaying:'y',side:'right',gridcolor:'rgba(0,0,0,0)',rangemode:'tozero'},
+        margin:{l:50,r:60,t:20,b:100}
     },plotlyCfg);
 
     let h='<table><tr><th>门店</th><th>单量</th><th>实收</th><th>门店毛利</th><th>平台抽佣</th><th>抽佣毛利</th><th>毛利率</th><th>实收客单</th><th>配送成本</th><th>负毛利</th></tr>';
@@ -738,9 +786,11 @@ function refresh() {
 }
 
 // ============ INIT ============
-initFilters();
-document.getElementById('updateTime').textContent = '数据更新: ' + allDates[allDates.length - 1];
-refresh();
+function initDashboard() {
+    initFilters();
+    document.getElementById('updateTime').textContent = '数据更新: ' + allDates[allDates.length - 1];
+    refresh();
+}
 </script>
 </body>
 </html>'''
