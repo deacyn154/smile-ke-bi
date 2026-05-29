@@ -241,10 +241,11 @@ daily['real_margin_rate'] = np.where(
 # 7. Add Commission Cost & Delivery Metrics
 # =============================================
 daily['commission_rate'] = daily['qn_store_id'].map(comm_lookup).fillna(0)
-daily['commission_cost'] = (daily['revenue'] * daily['commission_rate']).round(2)  # 抽佣毛利
+daily['commission_fee'] = (daily['revenue'] * daily['commission_rate']).round(2)  # 抽佣费 = 实收 × 点数
+daily['commission_profit'] = (daily['real_profit'] - daily['commission_fee']).round(2)  # 抽佣毛利 = 门店毛利 - 抽佣费
 daily['commission_margin'] = np.where(
     daily['revenue'] > 0,
-    (daily['commission_cost'] / daily['revenue'] * 100).round(2),
+    (daily['commission_profit'] / daily['revenue'] * 100).round(2),  # 毛利率 = 抽佣毛利 / 实收
     0
 )
 
@@ -267,7 +268,7 @@ print(f'Revenue: {daily["revenue"].sum():.2f}')
 print(f'Gross profit (before promo): {daily["gross_profit"].sum():.2f}')
 print(f'Total promo: {daily["promo_fee"].sum():.2f}')
 print(f'Real profit (after promo): {daily["real_profit"].sum():.2f}')
-print(f'Commission cost: {daily["commission_cost"].sum():.2f}')
+print(f'Commission fee: {daily["commission_fee"].sum():.2f}')
 print(f'Total delivery fee: {daily["delivery_fee"].sum():.2f}')
 print(f'Total delivery orders: {daily["delivery_order_cnt"].sum()}')
 print(f'Avg delivery cost: {daily["avg_delivery_cost"].mean():.2f}')

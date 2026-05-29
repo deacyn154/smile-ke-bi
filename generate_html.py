@@ -176,7 +176,7 @@ tr:hover td { background:rgba(108,142,242,0.05); }
     .kpi-value { font-size:16px; }
     .kpi-card { padding:8px; }
 }
-@media (min-width:1024px) { .kpi-grid { grid-template-columns:repeat(7,1fr); } }
+@media (min-width:1024px) { .kpi-grid { grid-template-columns:repeat(4,1fr); } }
 @media (min-width:769px) and (max-width:1023px) { .kpi-grid { grid-template-columns:repeat(4,1fr); } }
 </style>
 </head>
@@ -252,7 +252,7 @@ tr:hover td { background:rgba(108,142,242,0.05); }
         </div>
         <div class="row">
             <div class="chart-section"><h3>各渠道实收</h3><div id="chartChannelRev"></div></div>
-            <div class="chart-section"><h3>各渠道抽佣毛利</h3><div id="chartChannelComm"></div></div>
+            <div class="chart-section"><h3>各渠道平台抽佣</h3><div id="chartChannelComm"></div></div>
         </div>
         <div class="chart-section"><h3>渠道明细</h3><div class="table-scroll" id="channelTable"></div></div>
     </div>
@@ -525,9 +525,9 @@ function getFilteredPromo() {
 // ============ KPIs ============
 function renderKPIs(data) {
     const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'real_profit');
-    const cc=sum(data,'commission_cost'), nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
+    const cc=sum(data,'commission_fee'), cp=sum(data,'commission_profit'), nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
     const df2=sum(data,'delivery_fee'),doc=sum(data,'delivery_order_cnt');
-    const margin=rev>0?(cc/rev*100).toFixed(1):0;
+    const margin=rev>0?(cp/rev*100).toFixed(1):0;
     const negPct=ord>0?(nc/ord*100).toFixed(1):0;
     const aov=ord>0?(rev/ord).toFixed(1):0;
     const adc=doc>0?(df2/doc).toFixed(1):0;
@@ -536,7 +536,8 @@ function renderKPIs(data) {
         '<div class="kpi-card blue"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div></div>'+
         '<div class="kpi-card accent"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div></div>'+
         '<div class="kpi-card green"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--red)">-¥'+pf.toFixed(0)+' 推广</div></div>'+
-        '<div class="kpi-card orange"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cc)+'</div></div>'+
+        '<div class="kpi-card orange"><div class="kpi-label">平台抽佣</div><div class="kpi-value">'+fmtY(cc)+'</div></div>'+
+        '<div class="kpi-card green"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div></div>'+
         '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div></div>'+
         '<div class="kpi-card accent"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div></div>'+
         '<div class="kpi-card '+ngCls+'"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub">单均配送 ¥'+adc+'</div></div>';
@@ -552,14 +553,14 @@ function renderStore(data) {
         {x:names,y:stores.map(s=>s.real_profit||0),name:'门店毛利',type:'bar',marker:{color:'#5AD8A6'}}
     ],{...plotlyLayout,barmode:'group',xaxis:{...plotlyLayout.xaxis,tickangle:-45},margin:{l:50,r:20,t:20,b:100}},plotlyCfg);
 
-    let h='<table><tr><th>门店</th><th>单量</th><th>实收</th><th>门店毛利</th><th>抽佣毛利</th><th>毛利率</th><th>实收客单</th><th>配送成本</th><th>负毛利</th></tr>';
+    let h='<table><tr><th>门店</th><th>单量</th><th>实收</th><th>门店毛利</th><th>平台抽佣</th><th>抽佣毛利</th><th>毛利率</th><th>实收客单</th><th>配送成本</th><th>负毛利</th></tr>';
     stores.forEach(s=>{
-        const rev=s.revenue||0, rp=s.real_profit||0, cc=s.commission_cost||0;
-        const mg=rev>0?(cc/rev*100).toFixed(1):'0.0';
+        const rev=s.revenue||0, rp=s.real_profit||0, cf=s.commission_fee||0, cp=s.commission_profit||0;
+        const mg=rev>0?(cp/rev*100).toFixed(1):'0.0';
         const aov=rev>0?(rev/(s.order_cnt||1)).toFixed(1):'0.0';
         const dc=(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt).toFixed(1):'0.0';
         const np=(s.order_cnt||0)>0?((s.neg_cnt||0)/s.order_cnt*100).toFixed(1):'0.0';
-        h+='<tr><td>'+short(s.store_name)+'</td><td>'+(s.order_cnt||0).toLocaleString()+'</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cc)+'</td><td>'+mg+'%</td><td>¥'+aov+'</td><td>¥'+dc+'</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
+        h+='<tr><td>'+short(s.store_name)+'</td><td>'+(s.order_cnt||0).toLocaleString()+'</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cf)+'</td><td>'+fmtY(cp)+'</td><td>'+mg+'%</td><td>¥'+aov+'</td><td>¥'+dc+'</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
     });
     h+='</table>';
     document.getElementById('storeTable').innerHTML=h;
@@ -576,18 +577,18 @@ function renderChannel(data) {
     const chRev=[...ch].sort((a,b)=>b.revenue-a.revenue);
     Plotly.newPlot('chartChannelRev',[{y:chRev.map(c=>c.channel),x:chRev.map(c=>c.revenue),type:'bar',orientation:'h',marker:{color:'#5B8FF9'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'实收(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
-    const chComm=[...ch].sort((a,b)=>b.commission_cost-a.commission_cost);
-    Plotly.newPlot('chartChannelComm',[{y:chComm.map(c=>c.channel),x:chComm.map(c=>c.commission_cost),type:'bar',orientation:'h',marker:{color:'#FF9F43'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'抽佣毛利(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
+    const chComm=[...ch].sort((a,b)=>b.commission_fee-a.commission_fee);
+    Plotly.newPlot('chartChannelComm',[{y:chComm.map(c=>c.channel),x:chComm.map(c=>c.commission_fee),type:'bar',orientation:'h',marker:{color:'#FF9F43'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'平台抽佣(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
-    const chMarg=[...ch].sort((a,b)=>(b.commission_cost/(b.revenue||1))-(a.commission_cost/(a.revenue||1)));
-    Plotly.newPlot('chartChannelMargin',[{y:chMarg.map(c=>c.channel),x:chMarg.map(c=>c.revenue>0?(c.commission_cost/c.revenue*100).toFixed(1):0),type:'bar',orientation:'h',marker:{color:'#F6BD16'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'毛利率(%)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
+    const chMarg=[...ch].sort((a,b)=>(b.commission_profit/(b.revenue||1))-(a.commission_profit/(a.revenue||1)));
+    Plotly.newPlot('chartChannelMargin',[{y:chMarg.map(c=>c.channel),x:chMarg.map(c=>c.revenue>0?(c.commission_profit/c.revenue*100).toFixed(1):0),type:'bar',orientation:'h',marker:{color:'#F6BD16'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'毛利率(%)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
-    let h='<table><tr><th>渠道</th><th>单量</th><th>占比(%)</th><th>实收</th><th>门店毛利</th><th>抽佣毛利</th><th>毛利率(%)</th><th>负毛利占比</th></tr>';
+    let h='<table><tr><th>渠道</th><th>单量</th><th>占比(%)</th><th>实收</th><th>门店毛利</th><th>平台抽佣</th><th>抽佣毛利</th><th>毛利率(%)</th><th>负毛利占比</th></tr>';
     ch.forEach(c=>{
-        const rev=c.revenue||0, rp=c.real_profit||0, cc=c.commission_cost||0;
-        const mg=rev>0?(cc/rev*100).toFixed(1):'0.0';
+        const rev=c.revenue||0, rp=c.real_profit||0, cf=c.commission_fee||0, cp=c.commission_profit||0;
+        const mg=rev>0?(cp/rev*100).toFixed(1):'0.0';
         const np=c.order_cnt>0?((c.neg_cnt||0)/c.order_cnt*100).toFixed(1):'0.0';
-        h+='<tr><td>'+c.channel+'</td><td>'+c.order_cnt.toLocaleString()+'</td><td>'+c.pct+'%</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cc)+'</td><td>'+mg+'%</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
+        h+='<tr><td>'+c.channel+'</td><td>'+c.order_cnt.toLocaleString()+'</td><td>'+c.pct+'%</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cf)+'</td><td>'+fmtY(cp)+'</td><td>'+mg+'%</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
     });
     h+='</table>';
     document.getElementById('channelTable').innerHTML=h;
