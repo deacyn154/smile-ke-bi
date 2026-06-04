@@ -70,6 +70,55 @@ search_map_json = json.dumps(search_map, ensure_ascii=False)
 channels_json = json.dumps(channels, ensure_ascii=False)
 dates_json = json.dumps(dates_all, ensure_ascii=False)
 
+# --- Product data ---
+import pandas as pd2
+prod_path = os.path.join(WAREHOUSE, 'product', 'product_daily.xlsx')
+product_json = '[]'
+if os.path.exists(prod_path):
+    product_df = pd2.read_excel(prod_path)
+    product_df = product_df.fillna(0)
+    # Use latest period as default and embed all periods in data
+    product_df['period'] = product_df['period'].astype(str)
+    periods = sorted(product_df['period'].unique())
+    latest_period = periods[-1] if len(periods) > 0 else '202605'
+    all_product_json = json.dumps(product_df.to_dict(orient='records'), ensure_ascii=False)
+    product_json_all = json.dumps(periods, ensure_ascii=False)
+    # Filter to latest period for dashboard display
+    product_df_display = product_df[product_df['period'] == latest_period].copy()
+    product_records = product_df_display.to_dict(orient='records')
+    product_json = json.dumps(product_records, ensure_ascii=False)
+    print(f'Product data: {len(product_records)} rows loaded (period={latest_period}, total={len(product_df)}, periods={periods})')
+
+# --- Raw category data: combine all period files ---
+rawcat_json = '[]'
+rawcat_combined_json = '[]'
+all_rawcat_turnover = []
+all_rawcat_combined = []
+for p in periods:
+    rtp = os.path.join(WAREHOUSE, 'product', f'rawcat_turnover_{p}.xlsx')
+    if os.path.exists(rtp):
+        all_rawcat_turnover.append(pd2.read_excel(rtp).fillna(0))
+    rcp_path = os.path.join(WAREHOUSE, 'product', 'rawcat_combined.xlsx')
+# Also try legacy single file
+if os.path.exists(os.path.join(WAREHOUSE, 'product', 'rawcat_turnover.xlsx')):
+    all_rawcat_turnover.append(pd2.read_excel(os.path.join(WAREHOUSE, 'product', 'rawcat_turnover.xlsx')).fillna(0))
+if all_rawcat_turnover:
+    rawcat_df = pd.concat(all_rawcat_turnover, ignore_index=True)
+    # Filter to latest period
+    if 'period' in rawcat_df.columns:
+        rawcat_df = rawcat_df[rawcat_df['period'].astype(str) == latest_period]
+    rawcat_records = rawcat_df.to_dict(orient='records')
+    rawcat_json = json.dumps(rawcat_records, ensure_ascii=False)
+    print(f'Raw cat data: {len(rawcat_records)} rows loaded')
+if os.path.exists(rawcat_combined_path := os.path.join(WAREHOUSE, 'product', 'rawcat_combined.xlsx')):
+    rawcat_combined_df = pd2.read_excel(rawcat_combined_path)
+    rawcat_combined_df = rawcat_combined_df.fillna(0)
+    if 'period' in rawcat_combined_df.columns:
+        rawcat_combined_df = rawcat_combined_df[rawcat_combined_df['period'].astype(str) == latest_period]
+    rawcat_combined_records = rawcat_combined_df.to_dict(orient='records')
+    rawcat_combined_json = json.dumps(rawcat_combined_records, ensure_ascii=False)
+    print(f'Raw cat combined: {len(rawcat_combined_records)} rows loaded')
+
 # =============================================
 # HTML template
 # =============================================
@@ -79,15 +128,22 @@ html = '''<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>微笑客经营看板</title>
-<script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.32.0/plotly.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 :root {
-    --bg: #0f1117; --card: #1a1d29; --border: #2a2d3a;
-    --text: #e8eaf0; --text-dim: #8b8fa3;
-    --accent: #6C8EF2; --green: #5AD8A6; --yellow: #F6BD16; --red: #E86452; --blue: #5B8FF9;
-    --orange: #FF9F43;
+    --bg: #f5f6f8; --card: #ffffff; --border: #e5e7eb;
+    --text: #1f2937; --text-dim: #9ca3af;
+    --accent: #4f6ef7; --green: #10b981; --yellow: #f59e0b; --red: #ef4444; --blue: #4f6ef7;
+    --orange: #f97316;
+    --meituan: #FFD100; --eleme: #00AAFF; --jd: #E2231A; --pos: #4f6ef7;
+    --card-hover: #f9fafb;
 }
+/* Scrollbar */
+::-webkit-scrollbar { width:5px; height:5px; }
+::-webkit-scrollbar-track { background:var(--bg); }
+::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+::-webkit-scrollbar-thumb:hover { background:var(--text-dim); }
 * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
 body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden; }
 .dashboard { max-width:1440px; margin:0 auto; padding:24px; }
@@ -114,14 +170,14 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Mi
 .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
 .cal-grid .cal-weekday { text-align:center; font-size:10px; color:var(--text-dim); padding:4px 0; }
 .cal-grid .cal-day { text-align:center; font-size:12px; padding:4px 0; border-radius:6px; cursor:pointer; color:var(--text-dim); transition:all .1s; }
-.cal-grid .cal-day:hover { background:rgba(108,142,242,0.15); }
-.cal-grid .cal-day.in-range { background:rgba(108,142,242,0.25); color:var(--text); border-radius:0; }
+.cal-grid .cal-day:hover { background:rgba(79,110,247,0.1); }
+.cal-grid .cal-day.in-range { background:rgba(79,110,247,0.15); color:var(--text); border-radius:0; }
 .cal-grid .cal-day.range-start { background:var(--accent); color:#fff; border-radius:6px 0 0 6px; }
 .cal-grid .cal-day.range-end { background:var(--accent); color:#fff; border-radius:0 6px 6px 0; }
 .cal-grid .cal-day.range-start.range-end { border-radius:6px; }
 .cal-grid .cal-day.other-month { color:rgba(139,143,163,0.3); }
 .cal-toggle { color:var(--accent); font-size:12px; cursor:pointer; padding:3px 8px; border-radius:10px; border:1px solid var(--border); background:transparent; touch-action:manipulation; }
-.cal-toggle:hover { background:rgba(108,142,242,0.1); }
+.cal-toggle:hover { background:rgba(79,110,247,0.08); }
 /* Store search */
 .store-search { width:100%; padding:6px 10px; border-radius:16px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; outline:none; margin-bottom:6px; }
 .store-search:focus { border-color:var(--accent); }
@@ -136,7 +192,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Mi
 .chip-action:hover { border-color:var(--accent); color:var(--text); }
 /* KPI */
 .kpi-grid { display:grid; gap:12px; margin-bottom:20px; }
-.kpi-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; }
+.kpi-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; position:relative; overflow:hidden; transition:all .25s; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+.kpi-card:hover { background:var(--card-hover); transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.08); }
 .kpi-label { color:var(--text-dim); font-size:12px; margin-bottom:4px; }
 .kpi-value { font-size:24px; font-weight:700; letter-spacing:-0.3px; }
 .kpi-sub { font-size:11px; margin-top:4px; }
@@ -156,15 +213,17 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Mi
 .tab-content.active { display:block; }
 .chart-section { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:12px; }
 .chart-section h3 { font-size:13px; margin-bottom:12px; color:var(--text-dim); }
+.chart-section [id^="chart"] { width:100% !important; max-width:100%; }
+.chart-section .js-plotly-plot { width:100% !important; }
 .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:8px; border:1px solid var(--border); }
 .table-scroll table { min-width:700px; width:100%; border-collapse:collapse; font-size:12px; }
 th { text-align:left; padding:8px 10px; background:var(--bg); color:var(--text-dim); font-weight:600; border-bottom:1px solid var(--border); position:sticky; top:0; white-space:nowrap; }
 td { padding:6px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
-tr:hover td { background:rgba(108,142,242,0.05); }
+tr:hover td { background:rgba(79,110,247,0.04); }
 .badge { display:inline-block; padding:2px 6px; border-radius:3px; font-size:11px; font-weight:500; }
-.badge-warn { background:rgba(232,100,82,0.15); color:var(--red); }
-.badge-ok { background:rgba(90,216,166,0.15); color:var(--green); }
+.badge-warn { background:rgba(239,68,68,0.1); color:var(--red); }
+.badge-ok { background:rgba(16,185,129,0.1); color:var(--green); }
 /* Mobile */
 @media (max-width:768px) {
     .dashboard { padding:10px; }
@@ -187,36 +246,118 @@ tr:hover td { background:rgba(108,142,242,0.05); }
 }
 @media (min-width:1024px) { .kpi-grid { grid-template-columns:repeat(5,1fr); } }
 @media (min-width:769px) and (max-width:1023px) { .kpi-grid { grid-template-columns:repeat(3,1fr); } }
-/* === Login Overlay === */
-.login-overlay { position:fixed; inset:0; background:var(--bg); z-index:9999; display:flex; align-items:center; justify-content:center; }
-.login-box { background:var(--card); border:1px solid var(--border); border-radius:16px; padding:32px 28px; width:340px; max-width:90vw; text-align:center; }
-.login-box h2 { font-size:20px; margin-bottom:4px; }
-.login-box .login-sub { color:var(--text-dim); font-size:12px; margin-bottom:20px; }
-.login-box input { width:100%; padding:10px 14px; border-radius:10px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:14px; outline:none; text-align:center; }
-.login-box input:focus { border-color:var(--accent); }
-.login-box .login-err { color:var(--red); font-size:12px; margin-top:10px; min-height:18px; }
-.login-box button { margin-top:12px; width:100%; padding:10px; border-radius:10px; border:none; background:var(--accent); color:#fff; font-size:14px; font-weight:600; cursor:pointer; }
-.login-box button:hover { opacity:0.9; }
 .export-btn { padding:4px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg); color:var(--text-dim); font-size:11px; cursor:pointer; float:right; }
 .export-btn:hover { border-color:var(--accent); color:var(--text); }
+/* === Smart Summary === */
+.summary-panel { background:linear-gradient(135deg, rgba(79,110,247,0.04), rgba(16,185,129,0.03)); border:1px solid rgba(79,110,247,0.15); border-radius:12px; padding:14px 18px; margin-bottom:16px; }
+.summary-panel h3 { font-size:13px; color:var(--accent); margin-bottom:8px; display:flex; align-items:center; gap:6px; }
+.summary-text { font-size:13px; line-height:1.7; color:var(--text); }
+.summary-text .highlight-red { color:var(--red); font-weight:600; }
+.summary-text .highlight-green { color:var(--green); font-weight:600; }
+.summary-text .highlight-yellow { color:var(--yellow); font-weight:600; }
+.summary-text .highlight-blue { color:var(--blue); font-weight:600; }
+/* === Alert Banner === */
+.alert-banner { display:none; background:rgba(232,100,82,0.08); border:1px solid rgba(232,100,82,0.25); border-radius:10px; padding:10px 14px; margin-bottom:12px; }
+.alert-banner.show { display:flex; align-items:center; gap:8px; }
+.alert-banner .alert-icon { font-size:16px; }
+.alert-banner .alert-msg { font-size:12px; color:var(--red); flex:1; }
+.alert-banner .alert-dismiss { cursor:pointer; color:var(--text-dim); font-size:16px; }
+/* === KPI Upgrade === */
+.kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; opacity:0.5; }
+.kpi-card.accent::before { background:var(--accent); }
+.kpi-card.green::before { background:var(--green); }
+.kpi-card.yellow::before { background:var(--yellow); }
+.kpi-card.red::before { background:var(--red); }
+.kpi-card.blue::before { background:var(--blue); }
+.kpi-card.orange::before { background:var(--orange); }
+.kpi-sparkline { margin-top:6px; height:28px; }
+.kpi-sparkline svg { width:100%; height:100%; }
+.kpi-sparkline path { fill:none; stroke-width:1.5; stroke-linecap:round; stroke-linejoin:round; }
+.kpi-sparkline .area { opacity:0.15; }
+/* === Sortable Tables === */
+th.sortable { cursor:pointer; user-select:none; position:relative; padding-right:20px !important; }
+th.sortable:hover { color:var(--accent); }
+th.sortable::after { content:'↕'; position:absolute; right:6px; opacity:0.3; font-size:11px; }
+th.sortable.asc::after { content:'▲'; opacity:1; color:var(--accent); }
+th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
+/* Conditional formatting */
+.cell-good { color:var(--green); }
+.cell-warn { color:var(--yellow); }
+.cell-bad { color:var(--red); font-weight:600; }
+.cell-accent { color:var(--accent); }
+/* In-cell bar */
+.cell-bar-wrap { display:flex; align-items:center; gap:6px; }
+.cell-bar { height:6px; border-radius:3px; min-width:2px; transition:width .3s; }
+.cell-bar.green { background:var(--green); }
+.cell-bar.blue { background:var(--blue); }
+.cell-bar.orange { background:var(--orange); }
+.cell-bar.red { background:var(--red); }
+/* === Anomaly Badges === */
+.anomaly-dot { display:inline-block; width:6px; height:6px; border-radius:50%; margin-right:3px; vertical-align:middle; }
+.anomaly-dot.red { background:var(--red); animation:blink 2s infinite; }
+.anomaly-dot.yellow { background:var(--yellow); }
+@keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+.anomaly-tag { display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; margin-left:4px; }
+.anomaly-tag.warn { background:rgba(239,68,68,0.1); color:var(--red); }
+.anomaly-tag.info { background:rgba(79,110,247,0.1); color:var(--blue); }
+/* === Page Nav Upgrade === */
+.page-btn { transition:all .2s; }
+.page-btn:hover { opacity:0.85; }
+/* === Channel Badge === */
+.channel-badge { display:inline-block; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:600; }
+.channel-badge.meituan { background:rgba(255,209,0,0.15); color:#FFD100; }
+.channel-badge.eleme { background:rgba(0,170,255,0.15); color:#00AAFF; }
+.channel-badge.jd { background:rgba(226,35,26,0.15); color:#E86452; }
+.channel-badge.pos { background:rgba(79,110,247,0.1); color:#4f6ef7; }
+/* === Skeleton Loading === */
+@keyframes shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
+.skeleton { background:linear-gradient(90deg,var(--card) 25%,var(--card-hover) 50%,var(--card) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
+/* === Pulse for live data === */
+@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(79,110,247,0.3);} 50%{box-shadow:0 0 0 6px rgba(79,110,247,0);} }
+.pulse { animation:pulse 2s infinite; }
+/* === Tooltip === */
+.tooltip-wrap { position:relative; cursor:help; border-bottom:1px dotted var(--text-dim); }
+.tooltip-wrap:hover .tooltip-content { display:block; }
+.tooltip-content { display:none; position:absolute; bottom:120%; left:50%; transform:translateX(-50%); background:var(--card); border:1px solid var(--border); border-radius:8px; padding:6px 10px; font-size:11px; white-space:nowrap; z-index:100; box-shadow:0 4px 16px rgba(0,0,0,0.1); }
+/* === KPI Clickable === */
+.kpi-card.clickable { cursor:pointer; position:relative; }
+.kpi-card.clickable:hover { border-color:var(--accent); }
+.kpi-card.clickable::after { content:'\\1F50D'; position:absolute; top:8px; right:10px; font-size:11px; opacity:0; transition:opacity .2s; }
+.kpi-card.clickable:hover::after { opacity:0.5; }
+/* === Modal === */
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9998; justify-content:center; align-items:center; padding:20px; }
+.modal-overlay.show { display:flex; }
+.modal-box { background:var(--card); border:1px solid var(--border); border-radius:16px; width:100%; max-width:820px; max-height:85vh; display:flex; flex-direction:column; animation:slideUp .25s ease; }
+@keyframes slideUp { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
+.modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.modal-header h2 { font-size:16px; }
+.modal-close { cursor:pointer; font-size:20px; color:var(--text-dim); width:32px; height:32px; display:flex; align-items:center; justify-content:center; border-radius:8px; border:none; background:transparent; }
+.modal-close:hover { background:rgba(255,255,255,0.05); color:var(--text); }
+.modal-body { padding:16px 20px; overflow-y:auto; flex:1; }
+.modal-chart { min-height:260px; margin-bottom:12px; }
 </style>
 </head>
 <body>
-<div class="login-overlay" id="loginOverlay">
-    <div class="login-box">
-        <h2>🔐 微笑客经营看板</h2>
-        <div class="login-sub">请输入访问密码</div>
-        <input type="password" id="loginPwd" placeholder="请输入密码" onkeydown="if(event.key==='Enter')doLogin()">
-        <button onclick="doLogin()">进入看板</button>
-        <div class="login-err" id="loginErr"></div>
+<div class="modal-overlay" id="kpiModal">
+    <div class="modal-box">
+        <div class="modal-header">
+            <h2 id="modalTitle">门店明细</h2>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body" id="modalBody"></div>
     </div>
 </div>
-
-<div class="dashboard" id="dashboard" style="display:none;">
+<div class="dashboard" id="dashboard">
     <div class="header">
         <h1>微笑客经营看板</h1>
         <div class="update-time" id="updateTime"></div>
+        <div class="update-time" id="dateRangeLabel" style="font-size:13px;color:var(--accent)"></div>
     </div>
+    <div class="page-nav" style="display:flex;gap:0;margin-bottom:16px;">
+        <button class="page-btn active" onclick="switchPage('ops',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px 0 0 8px;cursor:pointer;font-size:14px;">运营数据</button>
+        <button class="page-btn" onclick="switchPage('product',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);border-radius:0 8px 8px 0;cursor:pointer;font-size:14px;border-left:none;">商品运营</button>
+    </div>
+    <div id="page-ops">
 
     <div class="filter-bar">
         <div class="filter-row">
@@ -261,6 +402,16 @@ tr:hover td { background:rgba(108,142,242,0.05); }
         </div>
     </div>
 
+    <div class="alert-banner" id="alertBanner">
+        <span class="alert-icon">⚠️</span>
+        <span class="alert-msg" id="alertMsg"></span>
+        <span class="alert-dismiss" onclick="document.getElementById('alertBanner').classList.remove('show')">×</span>
+    </div>
+    <div class="summary-panel" id="summaryPanel">
+        <h3>📋 数据快报</h3>
+        <div class="summary-text" id="summaryText"></div>
+    </div>
+
     <div class="kpi-grid" id="kpiGrid"></div>
 
     <div class="tab-nav-wrap">
@@ -268,12 +419,14 @@ tr:hover td { background:rgba(108,142,242,0.05); }
             <button class="tab-btn active" onclick="switchTab('store',this)">门店数据</button>
             <button class="tab-btn" onclick="switchTab('channel',this)">渠道分析</button>
             <button class="tab-btn" onclick="switchTab('time',this)">时间分析</button>
+            <button class="tab-btn" onclick="switchTab('neg',this)">负毛利</button>
+            <button class="tab-btn" onclick="switchTab('delivery',this)">配送</button>
         </div>
     </div>
 
     <div id="tab-store" class="tab-content active">
-        <div class="chart-section"><h3>各门店单量 vs 抽佣毛利</h3><div id="chartStoreBar"></div></div>
-        <div class="chart-section"><h3>门店明细 <button class="export-btn" onclick="exportTable('storeTable','门店明细')">📥 导出Excel</button></h3><div class="table-scroll" id="storeTable"></div></div>
+        <div class="chart-section"><h3>各门店单量 vs 抽佣毛利<span class="section-date-tag"></span></h3><div id="chartStoreBar"></div></div>
+        <div class="chart-section"><h3>门店明细 <span class="section-date-tag"></span><button class="export-btn" onclick="exportTable('storeTable','门店明细')">📥 导出Excel</button></h3><div class="table-scroll" id="storeTable"></div></div>
     </div>
     <div id="tab-channel" class="tab-content">
         <div class="row">
@@ -284,29 +437,49 @@ tr:hover td { background:rgba(108,142,242,0.05); }
             <div class="chart-section"><h3>各渠道实收</h3><div id="chartChannelRev"></div></div>
             <div class="chart-section"><h3>各渠道平台抽佣</h3><div id="chartChannelComm"></div></div>
         </div>
-        <div class="chart-section"><h3>渠道明细 <button class="export-btn" onclick="exportTable('channelTable','渠道明细')">📥 导出Excel</button></h3><div class="table-scroll" id="channelTable"></div></div>
+        <div class="chart-section"><h3>渠道明细 <span class="section-date-tag"></span><button class="export-btn" onclick="exportTable('channelTable','渠道明细')">📥 导出Excel</button></h3><div class="table-scroll" id="channelTable"></div></div>
     </div>
     <div id="tab-time" class="tab-content">
-        <div class="chart-section"><h3>每日单量 & 抽佣毛利趋势</h3><div id="chartTimeTrend"></div></div>
-        <div class="chart-section"><h3>每日明细 <button class="export-btn" onclick="exportTable('timeTable','每日明细')">📥 导出Excel</button></h3><div class="table-scroll" id="timeTable"></div></div>
+        <div class="chart-section"><h3>每日单量 & 抽佣毛利趋势<span class="section-date-tag"></span></h3><div id="chartTimeTrend"></div></div>
+        <div class="chart-section"><h3>每日明细 <span class="section-date-tag"></span><button class="export-btn" onclick="exportTable('timeTable','每日明细')">📥 导出Excel</button></h3><div class="table-scroll" id="timeTable"></div></div>
+    </div>
+    <div id="tab-neg" class="tab-content">
+        <div class="chart-section"><h3>每日负毛利占比趋势<span class="section-date-tag"></span></h3><div id="chartNegStore"></div></div>
+        <div class="chart-section"><h3>负毛利明细 <span class="section-date-tag"></span><button class="export-btn" onclick="exportTable('negTable','负毛利明细')">📥 导出Excel</button></h3><div class="table-scroll" id="negTable"></div></div>
+    </div>
+    <div id="tab-delivery" class="tab-content">
+        <div class="chart-section"><h3>每日单均配送成本<span class="section-date-tag"></span></h3><div id="chartDelCost"></div></div>
+        <div class="chart-section"><h3>每日配送订单占比<span class="section-date-tag"></span></h3><div id="chartDelRatio"></div></div>
+        <div class="chart-section"><h3>配送明细 <span class="section-date-tag"></span><button class="export-btn" onclick="exportTable('delTable','配送明细')">📥 导出Excel</button></h3><div class="table-scroll" id="delTable"></div></div>
+    </div>
+</div>
+
+<div id="page-product" style="display:none;">
+    <div class="filter-bar">
+        <div class="filter-row">
+            <span class="filter-label">月份</span>
+            <div class="chip-group" id="prodPeriodChips"></div>
+        </div>
+    </div>
+    <div class="kpi-grid" id="prodKpiGrid"></div>
+    <div class="tab-nav-wrap">
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchProdTab('turnover',this)">动销分析</button>
+            <button class="tab-btn" onclick="switchProdTab('sales',this)">品类销售</button>
+        </div>
+    </div>
+    <div id="prod-tab-turnover" class="tab-content active">
+        <div class="chart-section"><h3>大类动销率 & 毛利率对比</h3><div id="chartProdCatTurnover"></div></div>
+        <div class="chart-section"><h3>门店动销率排名</h3><div id="chartProdStoreTurnover"></div></div>
+        <div class="chart-section"><h3>一级分类动销明细<button class="export-btn" onclick="exportTable('prodRawcatTable','一级分类动销')">📥 导出分类表</button><button class="export-btn" style="margin-left:4px" onclick="exportStoreCat()">📥 导出各门店ABC</button></h3><div class="table-scroll" id="prodRawcatTable"></div></div>
+    </div>
+    <div id="prod-tab-sales" class="tab-content">
+        <div class="chart-section"><h3>品类销售汇总<button class="export-btn" onclick="exportTable('prodSalesSummary','品类销售汇总')">📥 导出Excel</button></h3><div class="table-scroll" id="prodSalesSummary"></div></div>
+        <div class="chart-section"><h3>一级分类销售明细<button class="export-btn" onclick="exportTable('prodSalesDetail','一级分类销售明细')">📥 导出Excel</button></h3><div class="table-scroll" id="prodSalesDetail"></div></div>
     </div>
 </div>
 
 <script>
-// ============ LOGIN (暂关) ============
-const PWD_HASH = '33f17839cb399b359a0deaa4387a29ca211dd8be792019288aeffb029e692b46';
-(async function(){
-    document.getElementById('loginOverlay').style.display='none'; document.getElementById('dashboard').style.display='block'; initDashboard();
-})();
-async function sha256(m){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(m));return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,'0')).join('');}
-async function doLogin(){
-    const pwd=document.getElementById('loginPwd').value;
-    if(!pwd){document.getElementById('loginErr').textContent='请输入密码';return;}
-    const h=await sha256(pwd);
-    if(h===PWD_HASH){sessionStorage.setItem('_auth','1');document.getElementById('loginOverlay').style.display='none';document.getElementById('dashboard').style.display='block';initDashboard();}
-    else{document.getElementById('loginErr').textContent='密码错误，请重试';document.getElementById('loginPwd').value='';}
-}
-
 // ============ EXPORT ============
 function exportTable(tableId, filename) {
     const table = document.getElementById(tableId).querySelector('table');
@@ -315,10 +488,39 @@ function exportTable(tableId, filename) {
     XLSX.writeFile(wb, filename + '.xlsx');
 }
 
+// Export per-store ABC category turnover data (from productData, no extra embedded data)
+function exportStoreCat() {
+    const storeCat = getPeriodData(selectedProdPeriod).filter(r => r.store_name !== '全部门店' && ['食品','日化','百货'].includes(r.cat));
+    if (!storeCat.length) { alert('暂无门店品类数据'); return; }
+    const rows = storeCat.map(r => ({
+        '门店': r.store_name,
+        '品类': r.cat,
+        'SKU总数': Math.round(r.sku_total || 0),
+        '有动销SKU': Math.round(r.sku_active || 0),
+        '无动销SKU': Math.round((r.sku_total || 0) - (r.sku_active || 0)),
+        '动销率': parseFloat((r.turnover_rate || 0).toFixed(1)),
+        '货值': Math.round(r.goods_value || 0),
+        '销量': Math.round(r.qty || 0),
+        '销售额': Math.round(r.revenue || 0),
+        '毛利': Math.round(r.profit || 0),
+        '毛利率': parseFloat((r.margin || 0).toFixed(1)),
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:28},{wch:8},{wch:10},{wch:10},{wch:10},{wch:8},{wch:10},{wch:8},{wch:10},{wch:10},{wch:8}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '门店品类动销');
+    XLSX.writeFile(wb, '各门店ABC动销.xlsx');
+}
+
 
 // ============ DATA ============
 const rawData = ''' + data_json + ''';
 const promoData = ''' + promo_json + ''';
+const productData = ''' + product_json + ''';
+const allProductData = ''' + all_product_json + ''';
+const productPeriods = ''' + product_json_all + ''';
+const rawcatData = ''' + rawcat_json + ''';
+const rawcatCombinedData = ''' + rawcat_combined_json + ''';
 const allStoresFull = ''' + stores_json + ''';
 const allChannels = ''' + channels_json + ''';
 const allDates = ''' + dates_json + ''';
@@ -329,7 +531,7 @@ const isMobile = window.innerWidth < 768;
 const chartH = isMobile ? 260 : 380;
 const chartHS = isMobile ? 220 : 340;
 
-const plotlyLayout = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#e8eaf0',family:'-apple-system,PingFang SC,Microsoft YaHei'}, xaxis:{gridcolor:'#2a2d3a',zerolinecolor:'#2a2d3a'}, yaxis:{gridcolor:'#2a2d3a',zerolinecolor:'#2a2d3a'}, margin:{l:60,r:20,t:20,b:60}, height:chartH };
+const plotlyLayout = { paper_bgcolor:'rgba(0,0,0,0)', plot_bgcolor:'rgba(0,0,0,0)', font:{color:'#1f2937',family:'-apple-system,PingFang SC,Microsoft YaHei'}, xaxis:{gridcolor:'#e5e7eb',zerolinecolor:'#e5e7eb'}, yaxis:{gridcolor:'#e5e7eb',zerolinecolor:'#e5e7eb'}, margin:{l:60,r:20,t:20,b:60}, height:chartH };
 const plotlyCfg = { displayModeBar:false, responsive:true };
 
 // ============ SHORT NAME HELPERS ============
@@ -392,6 +594,11 @@ function setDateRange(mode) {
         if (btn) btn.classList.add('active');
     }
     calOpen = false; document.getElementById('calendarWrap').classList.remove('show');
+    // Show date range label
+    let drLabel = dateFrom === dateTo ? dateFrom : dateFrom + ' ~ ' + dateTo;
+    document.getElementById('dateRangeLabel').textContent = '统计时段: ' + drLabel;
+    // Also update table section headers
+    document.querySelectorAll('.section-date-tag').forEach(el => { el.textContent = drLabel; });
     refresh();
 }
 
@@ -541,6 +748,12 @@ function switchTab(name, btn) {
     document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-'+name).classList.add('active');
+    // Force Plotly charts to fill container after tab switch
+    setTimeout(() => {
+        document.querySelectorAll('#tab-'+name+' .js-plotly-plot').forEach(el => {
+            if (el._fullLayout) Plotly.Plots.resize(el);
+        });
+    }, 50);
 }
 
 // ============ HELPERS ============
@@ -594,7 +807,171 @@ function deltaStr(curr, prev, isGoodUp) {
     return { txt: sign + Math.abs(pct) + '%', cls: cls };
 }
 
-// ============ KPIs ============
+// ============ SMART SUMMARY ============
+function renderSummary(data, prev) {
+    const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), cp=sum(data,'commission_profit');
+    const nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
+    const margin=rev>0?(cp/rev*100).toFixed(1):0;
+    const negPct=ord>0?(nc/ord*100).toFixed(1):0;
+
+    const pOrd=sum(prev,'order_cnt'), pRev=sum(prev,'revenue'), pCp=sum(prev,'commission_profit');
+    const ordChg=pOrd>0?((ord-pOrd)/pOrd*100).toFixed(1):0;
+    const revChg=pRev>0?((rev-pRev)/pRev*100).toFixed(1):0;
+    const cpChg=pCp>0?((cp-pCp)/pCp*100).toFixed(1):0;
+
+    // Top/Bottom stores
+    const stores=groupBy(data,['store_name']);
+    stores.sort((a,b)=>b.commission_profit-a.commission_profit);
+    const top3=stores.slice(0,3).map(s=>short(s.store_name)).join('、');
+    const bot3=stores.slice(-3).reverse().filter(s=>s.commission_profit<0).map(s=>short(s.store_name));
+    const botText=bot3.length>0?bot3.join('、'):null;
+
+    // High neg-margin stores
+    const negStores=stores.filter(s=>s.order_cnt>0&&(s.neg_cnt/s.order_cnt*100)>30).map(s=>short(s.store_name));
+    const negText=negStores.length>0?negStores.slice(0,3).join('、'):null;
+
+    // Channel analysis
+    const chs=groupBy(data,['channel']);
+    const chInfo=chs.map(c=>({n:c.channel, ord:c.order_cnt, rev:c.revenue}));
+    chInfo.sort((a,b)=>b.ord-a.ord);
+    const topCh=chInfo[0];
+
+    const parts=[];
+    // 1. Overall
+    parts.push('本期共 <span class="highlight-blue">'+ord.toLocaleString()+'</span> 单，实收 <span class="highlight-blue">'+fmtY(rev)+
+        '</span>，抽佣毛利 <span class="highlight-green">'+fmtY(cp)+'</span>（毛利率 '+margin+'%）。');
+    // 2. Change
+    const chgDir=parseFloat(ordChg)>0?'增长':'下降';
+    parts.push('环比'+chgDir+' <span class="'+(parseFloat(ordChg)>0?'highlight-green':'highlight-red')+'">'+Math.abs(ordChg)+'%</span>。');
+    // 3. Top channel
+    if(topCh) parts.push('最大渠道 <span class="highlight-blue">'+topCh.n+'</span>（'+topCh.ord.toLocaleString()+'单）。');
+    // 4. Top stores
+    parts.push('毛利贡献前三：<span class="highlight-green">'+top3+'</span>。');
+    // 5. Warnings
+    if(botText) parts.push('毛利亏损：<span class="highlight-red">'+botText+'</span>。');
+    if(negText) parts.push('高负毛利门店（>30%）：<span class="highlight-red">'+negText+'</span>。');
+    if(parseFloat(negPct)>25) parts.push('整体负毛利占比 <span class="highlight-red">'+negPct+'%</span>，需重点关注。');
+    // 6. Promotion
+    if(pf>0) parts.push('推广费合计 <span class="highlight-yellow">¥'+pf.toFixed(0)+'</span>。');
+
+    document.getElementById('summaryText').innerHTML=parts.join('');
+}
+
+// ============ ANOMALY ALERTS ============
+function renderAlerts(data, prev) {
+    const alerts=[];
+    // Check per-store neg margin spike
+    const stores=groupBy(data,['store_name']);
+    const prevStores=groupBy(prev,['store_name']);
+    const prevMap={}; prevStores.forEach(s=>{prevMap[s.store_name]={ord:s.order_cnt||0,neg:s.neg_cnt||0};});
+
+    const dangerStores=[];
+    stores.forEach(s=>{
+        const np=s.order_cnt>0?(s.neg_cnt/s.order_cnt*100):0;
+        const p=prevMap[s.store_name]||{ord:0,neg:0};
+        const pNp=p.ord>0?(p.neg/p.ord*100):0;
+        if(np>35&&np-pNp>10) dangerStores.push(short(s.store_name)+' '+np.toFixed(1)+'%');
+        else if(np>35) dangerStores.push(short(s.store_name)+' '+np.toFixed(1)+'%');
+    });
+    if(dangerStores.length>0) {
+        alerts.push('负毛利过高：'+dangerStores.slice(0,5).join(' / '));
+    }
+
+    // Delivery cost anomalies
+    const delStores=stores.filter(s=>(s.delivery_order_cnt||0)>3);
+    const delCosts=delStores.map(s=>({
+        name:short(s.store_name),
+        cost:(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt):0
+    }));
+    delCosts.sort((a,b)=>b.cost-a.cost);
+    const avgCost=delCosts.reduce((s,c)=>s+c.cost,0)/Math.max(1,delCosts.length);
+    const highCost=delCosts.filter(c=>c.cost>avgCost*1.3).slice(0,3);
+    if(highCost.length>0) {
+        alerts.push('配送成本偏高：'+highCost.map(c=>c.name+' ¥'+c.cost.toFixed(1)).join(' / '));
+    }
+
+    if(alerts.length>0) {
+        document.getElementById('alertBanner').classList.add('show');
+        document.getElementById('alertMsg').innerHTML='<b>异常预警：</b>'+alerts.join('<br>');
+    } else {
+        document.getElementById('alertBanner').classList.remove('show');
+    }
+}
+
+// ============ SPARKLINE ============
+function drawSparkline(containerId, values, colorName) {
+    const container=document.getElementById(containerId);
+    if(!container||values.length<2) return;
+    const color=getComputedStyle(document.documentElement).getPropertyValue('--'+colorName).trim()||'#6C8EF2';
+    const w=container.clientWidth||80, h=28;
+    const min=Math.min(...values), max=Math.max(...values);
+    const range=max-min||1;
+
+    let points=values.map((v,i)=>[(i/(values.length-1))*w, h-(v-min)/range*h]);
+    const pathD=points.map((p,i)=>(i===0?'M':'L')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+    const areaD=pathD+' L'+points[points.length-1][0].toFixed(1)+','+h+' L'+points[0][0].toFixed(1)+','+h+' Z';
+
+    container.innerHTML='<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path class="area" d="'+areaD+'" fill="'+color+'"/><path d="'+pathD+'" stroke="'+color+'"/></svg>';
+}
+
+// ============ SORTABLE TABLE ============
+const tableSortState={};
+function makeSortable(tableId, data, colDefs, formatRowFn) {
+    // colDefs: [{key, label, type:'num'|'str'|'pct', sortable:true}]
+    let h='<table><tr>';
+    colDefs.forEach((c,i)=>{
+        if(c.sortable===false) h+='<th>'+c.label+'</th>';
+        else h+=`<th class="sortable" onclick="sortAndRender('${tableId}',${i},'${c.type}')" title="点击排序">${c.label}</th>`;
+    });
+    h+='</tr>';
+
+    const state=tableSortState[tableId]||{col:-1,asc:true};
+    tableSortState[tableId]=state;
+
+    if(state.col>=0&&state.col<colDefs.length) {
+        const cdef=colDefs[state.col];
+        data.sort((a,b)=>{
+            let va=a[cdef.key]||0, vb=b[cdef.key]||0;
+            if(cdef.type==='num'||cdef.type==='pct') { va=Number(va); vb=Number(vb); }
+            else { va=String(va); vb=String(vb); }
+            if(va<vb) return state.asc?-1:1;
+            if(va>vb) return state.asc?1:-1;
+            return 0;
+        });
+    }
+
+    data.forEach((r,i)=>{ h+=formatRowFn(r,i); });
+    h+='</table>';
+    document.getElementById(tableId).innerHTML=h;
+    // 标记排序箭头
+    if(state.col>=0) {
+        const ths = document.getElementById(tableId).querySelectorAll('th');
+        ths.forEach((th,i) => th.classList.remove('asc','desc'));
+        if(ths[state.col]) ths[state.col].classList.add(state.asc?'asc':'desc');
+    }
+}
+function sortAndRender(tableId, colIdx, type) {
+    const state=tableSortState[tableId]||{col:-1,asc:true};
+    if(state.col===colIdx) state.asc=!state.asc;
+    else { state.col=colIdx; state.asc=true; }
+    refresh();
+}
+
+// Num to conditional className
+function numCls(v, thresholds, goodLow) {
+    // thresholds: [warn, bad] — values above warn get 'cell-warn', above bad get 'cell-bad'
+    // goodLow=true means lower is better
+    if(goodLow) {
+        if(v>thresholds[1]) return 'cell-bad';
+        if(v>thresholds[0]) return 'cell-warn';
+        return 'cell-good';
+    }
+    if(v>thresholds[1]) return 'cell-good';
+    if(v>thresholds[0]) return 'cell-warn';
+    return 'cell-bad';
+}
+
+// ============ KPIs with Sparklines ============
 function renderKPIs(data) {
     const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'real_profit');
     const cc=sum(data,'commission_fee'), cp=sum(data,'commission_profit'), nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
@@ -603,7 +980,21 @@ function renderKPIs(data) {
     const negPct=ord>0?(nc/ord*100).toFixed(1):0;
     const aov=ord>0?(rev/ord).toFixed(1):0;
     const adc=doc>0?(df2/doc).toFixed(1):0;
-    const ngCls=negPct>25?'red':'green';
+    const ngCls=parseFloat(negPct)>25?'red':'green';
+
+    // Get daily data for sparklines
+    const byDate=groupBy(data,['日期']);
+    byDate.sort((a,b)=>a.日期.localeCompare(b.日期));
+    const spkOrd=byDate.map(d=>d.order_cnt||0);
+    const spkRev=byDate.map(d=>d.revenue||0);
+    const spkGp=byDate.map(d=>d.real_profit||0);
+    const spkCp=byDate.map(d=>d.commission_profit||0);
+    const spkPf=byDate.map(d=>d.promo_fee||0);
+    const spkCc=byDate.map(d=>d.commission_fee||0);
+    const spkNg=byDate.map(d=>d.order_cnt>0?(d.neg_cnt/d.order_cnt*100):0);
+    const spkAdc=byDate.map(d=>(d.delivery_order_cnt||0)>0?(d.delivery_fee/d.delivery_order_cnt):0);
+    const spkAov=byDate.map(d=>d.order_cnt>0?(d.revenue/d.order_cnt):0);
+    const spkMarg=byDate.map(d=>d.revenue>0?(d.commission_profit/d.revenue*100):0);
 
     // 环比
     const prev = getPrevData(data);
@@ -616,7 +1007,6 @@ function renderKPIs(data) {
     const pNegPct = pOrd > 0 ? (pNeg / pOrd * 100) : 0;
     const pMargin = pRev > 0 ? (pCp / pRev * 100) : 0;
 
-    // 环比：上升标红↓，下降标绿↑（统一规则）
     const dOrd = deltaStr(ord, pOrd, false);
     const dRev = deltaStr(rev, pRev, false);
     const dGp = deltaStr(gp, pGp, false);
@@ -629,18 +1019,30 @@ function renderKPIs(data) {
     const dAdc = deltaStr(parseFloat(adc), pAdc, false);
 
     document.getElementById('kpiGrid').innerHTML =
-        // 第一行
-        '<div class="kpi-card blue"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div><div class="kpi-sub" style="color:var(--'+dOrd.cls+')">'+dOrd.txt+'</div></div>'+
-        '<div class="kpi-card accent"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div><div class="kpi-sub" style="color:var(--'+dRev.cls+')">'+dRev.txt+'</div></div>'+
-        '<div class="kpi-card accent"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div><div class="kpi-sub" style="color:var(--'+dAov.cls+')">'+dAov.txt+'</div></div>'+
-        '<div class="kpi-card green"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--'+dGp.cls+')">'+dGp.txt+'</div></div>'+
-        '<div class="kpi-card green"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-sub" style="color:var(--'+dCp.cls+')">'+dCp.txt+'</div></div>'+
-        // 第二行
-        '<div class="kpi-card red"><div class="kpi-label">推广</div><div class="kpi-value">¥'+(pf.toFixed(0))+'</div><div class="kpi-sub" style="color:var(--'+dPf.cls+')">'+dPf.txt+'</div></div>'+
-        '<div class="kpi-card orange"><div class="kpi-label">抽佣</div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-sub" style="color:var(--'+dCc.cls+')">'+dCc.txt+'</div></div>'+
-        '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div><div class="kpi-sub" style="color:var(--'+dMarg.cls+')">'+dMarg.txt+'</div></div>'+
-        '<div class="kpi-card '+ngCls+'"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub" style="color:var(--'+dNeg.cls+')">'+dNeg.txt+'</div></div>'+
-        '<div class="kpi-card orange"><div class="kpi-label">单均配送</div><div class="kpi-value">¥'+adc+'</div><div class="kpi-sub" style="color:var(--'+dAdc.cls+')">'+dAdc.txt+'</div></div>';
+        '<div class="kpi-card blue clickable" data-kpi="order"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div><div class="kpi-sub" style="color:var(--'+dOrd.cls+')">'+dOrd.txt+'</div><div class="kpi-sparkline" id="spkOrd"></div></div>'+
+        '<div class="kpi-card accent clickable" data-kpi="revenue"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div><div class="kpi-sub" style="color:var(--'+dRev.cls+')">'+dRev.txt+'</div><div class="kpi-sparkline" id="spkRev"></div></div>'+
+        '<div class="kpi-card accent clickable" data-kpi="aov"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div><div class="kpi-sub" style="color:var(--'+dAov.cls+')">'+dAov.txt+'</div><div class="kpi-sparkline" id="spkAov"></div></div>'+
+        '<div class="kpi-card green clickable" data-kpi="store_profit"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--'+dGp.cls+')">'+dGp.txt+'</div><div class="kpi-sparkline" id="spkGp"></div></div>'+
+        '<div class="kpi-card green clickable" data-kpi="comm_profit"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-sub" style="color:var(--'+dCp.cls+')">'+dCp.txt+'</div><div class="kpi-sparkline" id="spkCp"></div></div>'+
+        '<div class="kpi-card red clickable" data-kpi="promo"><div class="kpi-label">推广</div><div class="kpi-value">¥'+(pf.toFixed(0))+'</div><div class="kpi-sub" style="color:var(--'+dPf.cls+')">'+dPf.txt+'</div><div class="kpi-sparkline" id="spkPf"></div></div>'+
+        '<div class="kpi-card orange"><div class="kpi-label">抽佣</div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-sub" style="color:var(--'+dCc.cls+')">'+dCc.txt+'</div><div class="kpi-sparkline" id="spkCc"></div></div>'+
+        '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div><div class="kpi-sub" style="color:var(--'+dMarg.cls+')">'+dMarg.txt+'</div><div class="kpi-sparkline" id="spkMarg"></div></div>'+
+        '<div class="kpi-card '+ngCls+' clickable" data-kpi="neg"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub" style="color:var(--'+dNeg.cls+')">'+dNeg.txt+'</div><div class="kpi-sparkline" id="spkNg"></div></div>'+
+        '<div class="kpi-card orange clickable" data-kpi="delivery"><div class="kpi-label">单均配送</div><div class="kpi-value">¥'+adc+'</div><div class="kpi-sub" style="color:var(--'+dAdc.cls+')">'+dAdc.txt+'</div><div class="kpi-sparkline" id="spkAdc"></div></div>';
+
+    // Draw sparklines
+    setTimeout(()=>{
+        drawSparkline('spkOrd',spkOrd,'blue');
+        drawSparkline('spkRev',spkRev,'accent');
+        drawSparkline('spkAov',spkAov,'accent');
+        drawSparkline('spkGp',spkGp,'green');
+        drawSparkline('spkCp',spkCp,'green');
+        drawSparkline('spkPf',spkPf,'red');
+        drawSparkline('spkCc',spkCc,'orange');
+        drawSparkline('spkMarg',spkMarg,'yellow');
+        drawSparkline('spkNg',spkNg,ngCls);
+        drawSparkline('spkAdc',spkAdc,'orange');
+    },10);
 }
 
 // ============ STORE TAB ============
@@ -648,7 +1050,7 @@ function renderStore(data) {
     const stores = groupBy(data,['store_name']);
     stores.sort((a,b)=>b.revenue-a.revenue);
     const names=stores.map(s=>short(s.store_name));
-    // 计算Y轴范围：0点对齐（有负毛利时左轴也往下移）
+    // 计算Y轴范围：0点对齐
     const maxOrd = Math.max(...stores.map(s=>s.order_cnt||0), 1);
     const pftVals = stores.map(s=>s.commission_profit||0);
     const minPft = Math.min(...pftVals, 0);
@@ -665,7 +1067,6 @@ function renderStore(data) {
         leftRng = [-leftNeg, maxOrd + padO];
     }
 
-    // 双Y轴并列：offsetgroup让两个不同Y轴的bar分组并排
     Plotly.newPlot('chartStoreBar',[
         {x:names,y:stores.map(s=>s.order_cnt||0),name:'单量',type:'bar',marker:{color:'#5B8FF9'},offsetgroup:0},
         {x:names,y:stores.map(s=>s.commission_profit||0),name:'抽佣毛利',type:'bar',marker:{color:'#FF9F43'},yaxis:'y2',offsetgroup:1}
@@ -676,17 +1077,60 @@ function renderStore(data) {
         margin:{l:50,r:60,t:20,b:100}
     },plotlyCfg);
 
-    let h='<table><tr><th>门店</th><th>单量</th><th>实收</th><th>门店毛利</th><th>平台抽佣</th><th>抽佣毛利</th><th>毛利率</th><th>实收客单</th><th>配送成本</th><th>负毛利</th></tr>';
-    stores.forEach(s=>{
+    // Compute derived values for table
+    const rows=stores.map(s=>{
         const rev=s.revenue||0, rp=s.real_profit||0, cf=s.commission_fee||0, cp=s.commission_profit||0;
-        const mg=rev>0?(cp/rev*100).toFixed(1):'0.0';
-        const aov=rev>0?(rev/(s.order_cnt||1)).toFixed(1):'0.0';
-        const dc=(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt).toFixed(1):'0.0';
-        const np=(s.order_cnt||0)>0?((s.neg_cnt||0)/s.order_cnt*100).toFixed(1):'0.0';
-        h+='<tr><td>'+short(s.store_name)+'</td><td>'+(s.order_cnt||0).toLocaleString()+'</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cf)+'</td><td>'+fmtY(cp)+'</td><td>'+mg+'%</td><td>¥'+aov+'</td><td>¥'+dc+'</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
+        return {
+            name:short(s.store_name),
+            ord:s.order_cnt||0,
+            rev:rev,
+            gross:rp,
+            comm:cf,
+            net:cp,
+            margin:rev>0?(cp/rev*100):0,
+            aov:rev>0?(rev/(s.order_cnt||1)):0,
+            delCost:(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt):0,
+            negPct:(s.order_cnt||0)>0?((s.neg_cnt||0)/s.order_cnt*100):0
+        };
     });
-    h+='</table>';
-    document.getElementById('storeTable').innerHTML=h;
+    const maxRev=Math.max(...rows.map(r=>r.rev),1);
+    const maxTableOrd=Math.max(...rows.map(r=>r.ord),1);
+
+    makeSortable('storeTable', rows, [
+        {key:'name',label:'门店',type:'str'},
+        {key:'ord',label:'单量',type:'num'},
+        {key:'rev',label:'实收',type:'num'},
+        {key:'gross',label:'门店毛利',type:'num'},
+        {key:'comm',label:'平台抽佣',type:'num'},
+        {key:'net',label:'抽佣毛利',type:'num'},
+        {key:'margin',label:'毛利率',type:'pct'},
+        {key:'aov',label:'实收客单',type:'num'},
+        {key:'delCost',label:'配送成本',type:'num'},
+        {key:'negPct',label:'负毛利',type:'pct'}
+    ], function(r,i){
+        const ordBarPct=(r.ord/maxTableOrd*60).toFixed(0);
+        const revBarPct=(r.rev/maxRev*60).toFixed(0);
+        const delCls=r.delCost>8?'cell-bad':r.delCost>5?'cell-warn':'';
+        return '<tr>'
+            +'<td>'+r.name+'</td>'
+            +'<td><span class="cell-bar-wrap"><span class="cell-bar blue" style="width:'+ordBarPct+'px"></span>'+r.ord.toLocaleString()+'</span></td>'
+            +'<td>'+fmtY(r.rev)+'</td>'
+            +'<td><span class="'+numCls(r.gross,[0,1000],false)+'">'+fmtY(r.gross)+'</span></td>'
+            +'<td class="cell-bad">'+fmtY(r.comm)+'</td>'
+            +'<td><span class="'+numCls(r.net,[0,1000],false)+'">'+fmtY(r.net)+'</span></td>'
+            +'<td><span class="'+numCls(r.margin,[10,20],false)+'">'+r.margin.toFixed(1)+'%</span></td>'
+            +'<td>¥'+r.aov.toFixed(1)+'</td>'
+            +'<td class="'+delCls+'">¥'+r.delCost.toFixed(1)+'</td>'
+            +'<td>'+negBadge(r.negPct)+'</td>'
+            +'</tr>';
+    });
+}
+
+function negBadge(np) {
+    if(np>35) return '<span class="badge badge-warn"><span class="anomaly-dot red"></span>'+np.toFixed(1)+'%</span>';
+    if(np>25) return '<span class="badge badge-warn">'+np.toFixed(1)+'%</span>';
+    if(np>15) return '<span class="anomaly-tag info">'+np.toFixed(1)+'%</span>';
+    return '<span class="badge badge-ok">'+np.toFixed(1)+'%</span>';
 }
 
 // ============ CHANNEL TAB ============
@@ -695,26 +1139,79 @@ function renderChannel(data) {
     const to = ch.reduce((s,c)=>s+c.order_cnt,0);
     ch.forEach(c=>{c.pct=to>0?(c.order_cnt/to*100).toFixed(1):'0.0';});
 
-    Plotly.newPlot('chartChannelPie',[{values:ch.map(c=>c.order_cnt),labels:ch.map(c=>c.channel),type:'pie',hole:0.45,marker:{colors:['#5B8FF9','#F6BD16','#5AD8A6','#E86452']},textinfo:'label+percent',textposition:'outside'}],{...plotlyLayout,height:chartHS,showlegend:false},plotlyCfg);
+    // Channel color map
+    const chColors={'美团闪购':'#FFD100','饿了么':'#00AAFF','京东到家':'#E86452','客无忧POS':'#5B8FF9'};
+    const chOrder=['美团闪购','饿了么','京东到家','客无忧POS'];
+    const chSorted=[...ch].sort((a,b)=>chOrder.indexOf(a.channel)-chOrder.indexOf(b.channel));
+
+    Plotly.newPlot('chartChannelPie',[{values:chSorted.map(c=>c.order_cnt),labels:chSorted.map(c=>c.channel),
+        type:'pie',hole:0.45,
+        marker:{colors:chSorted.map(c=>chColors[c.channel]||'#5B8FF9')},
+        textinfo:'label+percent',textposition:'outside'}],
+        {...plotlyLayout,height:chartHS,showlegend:false},plotlyCfg);
 
     const chRev=[...ch].sort((a,b)=>b.revenue-a.revenue);
-    Plotly.newPlot('chartChannelRev',[{y:chRev.map(c=>c.channel),x:chRev.map(c=>c.revenue),type:'bar',orientation:'h',marker:{color:'#5B8FF9'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'实收(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
+    Plotly.newPlot('chartChannelRev',[{y:chRev.map(c=>c.channel),x:chRev.map(c=>c.revenue),
+        type:'bar',orientation:'h',
+        marker:{color:chRev.map(c=>chColors[c.channel]||'#5B8FF9')}}],
+        {...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'实收(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
     const chComm=[...ch].sort((a,b)=>b.commission_fee-a.commission_fee);
-    Plotly.newPlot('chartChannelComm',[{y:chComm.map(c=>c.channel),x:chComm.map(c=>c.commission_fee),type:'bar',orientation:'h',marker:{color:'#FF9F43'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'平台抽佣(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
+    Plotly.newPlot('chartChannelComm',[{y:chComm.map(c=>c.channel),x:chComm.map(c=>c.commission_fee),
+        type:'bar',orientation:'h',
+        marker:{color:chComm.map(c=>chColors[c.channel]||'#FF9F43')}}],
+        {...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'平台抽佣(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
     const chMarg=[...ch].sort((a,b)=>(b.commission_profit/(b.revenue||1))-(a.commission_profit/(a.revenue||1)));
-    Plotly.newPlot('chartChannelMargin',[{y:chMarg.map(c=>c.channel),x:chMarg.map(c=>c.revenue>0?(c.commission_profit/c.revenue*100).toFixed(1):0),type:'bar',orientation:'h',marker:{color:'#F6BD16'}}],{...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'毛利率(%)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
+    Plotly.newPlot('chartChannelMargin',[{y:chMarg.map(c=>c.channel),x:chMarg.map(c=>c.revenue>0?(c.commission_profit/c.revenue*100).toFixed(1):0),
+        type:'bar',orientation:'h',
+        marker:{color:chMarg.map(c=>chColors[c.channel]||'#F6BD16')}}],
+        {...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'毛利率(%)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
-    let h='<table><tr><th>渠道</th><th>单量</th><th>占比(%)</th><th>实收</th><th>门店毛利</th><th>平台抽佣</th><th>抽佣毛利</th><th>毛利率(%)</th><th>负毛利占比</th></tr>';
-    ch.forEach(c=>{
+    // Channel badge helper
+    function chBadge(name) {
+        const cls={'美团闪购':'meituan','饿了么':'eleme','京东到家':'jd','客无忧POS':'pos'}[name]||'pos';
+        return '<span class="channel-badge '+cls+'">'+name+'</span>';
+    }
+
+    const rows=ch.map(c=>{
         const rev=c.revenue||0, rp=c.real_profit||0, cf=c.commission_fee||0, cp=c.commission_profit||0;
-        const mg=rev>0?(cp/rev*100).toFixed(1):'0.0';
-        const np=c.order_cnt>0?((c.neg_cnt||0)/c.order_cnt*100).toFixed(1):'0.0';
-        h+='<tr><td>'+c.channel+'</td><td>'+c.order_cnt.toLocaleString()+'</td><td>'+c.pct+'%</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cf)+'</td><td>'+fmtY(cp)+'</td><td>'+mg+'%</td><td><span class="badge badge-'+(np>25?'warn':'ok')+'">'+np+'%</span></td></tr>';
+        return {
+            name:c.channel,
+            ord:c.order_cnt||0,
+            pct:parseFloat(c.pct)||0,
+            rev:rev,
+            gross:rp,
+            comm:cf,
+            net:cp,
+            margin:rev>0?(cp/rev*100):0,
+            negPct:c.order_cnt>0?((c.neg_cnt||0)/c.order_cnt*100):0
+        };
     });
-    h+='</table>';
-    document.getElementById('channelTable').innerHTML=h;
+
+    makeSortable('channelTable', rows, [
+        {key:'name',label:'渠道',type:'str',sortable:false},
+        {key:'ord',label:'单量',type:'num'},
+        {key:'pct',label:'占比(%)',type:'pct'},
+        {key:'rev',label:'实收',type:'num'},
+        {key:'gross',label:'门店毛利',type:'num'},
+        {key:'comm',label:'平台抽佣',type:'num'},
+        {key:'net',label:'抽佣毛利',type:'num'},
+        {key:'margin',label:'毛利率(%)',type:'pct'},
+        {key:'negPct',label:'负毛利占比',type:'pct'}
+    ], function(r){
+        return '<tr>'
+            +'<td>'+chBadge(r.name)+'</td>'
+            +'<td>'+r.ord.toLocaleString()+'</td>'
+            +'<td>'+r.pct.toFixed(1)+'%</td>'
+            +'<td>'+fmtY(r.rev)+'</td>'
+            +'<td><span class="'+numCls(r.gross,[0,500],false)+'">'+fmtY(r.gross)+'</span></td>'
+            +'<td class="cell-bad">'+fmtY(r.comm)+'</td>'
+            +'<td><span class="'+numCls(r.net,[0,500],false)+'">'+fmtY(r.net)+'</span></td>'
+            +'<td><span class="'+numCls(r.margin,[5,15],false)+'">'+r.margin.toFixed(1)+'%</span></td>'
+            +'<td>'+negBadge(r.negPct)+'</td>'
+            +'</tr>';
+    });
 }
 
 // ============ NEG TAB ============
@@ -796,26 +1293,501 @@ function renderTimeAnalysis(data) {
         xaxis: { ...plotlyLayout.xaxis, title: '日期', type: 'date', tickformat: '%m-%d', dtick: 'D1' },
         yaxis: { title: '单量', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', range: leftRngT },
         yaxis2: { title: '抽佣毛利(元)', overlaying:'y', side:'right', gridcolor: 'rgba(0,0,0,0)', range: rightRngT },
-        legend: { orientation: 'h', y: 1.1, font: {color:'#e8eaf0',size:11} },
+        legend: { orientation: 'h', y: 1.1, font: {color:'#1f2937',size:11} },
         margin: { l: 50, r: 60, t: 20, b: 50 }
     }, plotlyCfg);
 
-    // 每日明细表
-    let h='<table><tr><th>日期</th><th>单量</th><th>实收</th><th>门店毛利</th><th>抽佣</th><th>抽佣毛利</th><th>毛利率</th></tr>';
-    byDate.forEach(d=>{
+    // 每日明细表 - sortable
+    const tRows = byDate.map(d=>{
         const rev=d.revenue||0, rp=d.real_profit||0, cf=d.commission_fee||0, cp=d.commission_profit||0;
-        const mg=rev>0?(cp/rev*100).toFixed(1):'0.0';
-        h+='<tr><td>'+d.日期+'</td><td>'+(d.order_cnt||0).toLocaleString()+'</td><td>'+fmtY(rev)+'</td><td>'+fmtY(rp)+'</td><td>'+fmtY(cf)+'</td><td>'+fmtY(cp)+'</td><td>'+mg+'%</td></tr>';
+        return {
+            date:d.日期,
+            ord:d.order_cnt||0,
+            rev:rev,
+            gross:rp,
+            comm:cf,
+            net:cp,
+            margin:rev>0?(cp/rev*100):0
+        };
     });
-    h+='</table>';
-    document.getElementById('timeTable').innerHTML=h;
+    makeSortable('timeTable', tRows, [
+        {key:'date',label:'日期',type:'str'},
+        {key:'ord',label:'单量',type:'num'},
+        {key:'rev',label:'实收',type:'num'},
+        {key:'gross',label:'门店毛利',type:'num'},
+        {key:'comm',label:'抽佣',type:'num'},
+        {key:'net',label:'抽佣毛利',type:'num'},
+        {key:'margin',label:'毛利率',type:'pct'}
+    ], function(r){
+        return '<tr><td>'+r.date+'</td><td>'+r.ord.toLocaleString()+'</td><td>'+fmtY(r.rev)+'</td><td>'+fmtY(r.gross)+'</td><td>'+fmtY(r.comm)+'</td><td>'+fmtY(r.net)+'</td><td>'+r.margin.toFixed(1)+'%</td></tr>';
+    });
+}
+
+// ============ NEG TAB ============
+function renderNeg(data) {
+    const byDate = groupBy(data, ['日期']);
+    byDate.sort((a, b) => a.日期.localeCompare(b.日期));
+    const dates = byDate.map(d => d.日期);
+    const negPcts = byDate.map(d => d.order_cnt > 0 ? ((d.neg_cnt || 0) / d.order_cnt * 100) : 0);
+    const maxP = Math.max(...negPcts, 1);
+
+    // Trend line
+    function trendLineV(vals, n) {
+        if (n < 2) return { x: dates, y: vals.map(() => null) };
+        let sx = 0, sy = 0, sxy = 0, sxx = 0;
+        for (let i = 0; i < n; i++) { sx += i; sy += vals[i]; sxy += i * vals[i]; sxx += i * i; }
+        const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+        const intercept = (sy - slope * sx) / n;
+        return { x: dates, y: vals.map((_, i) => Math.round((slope * i + intercept) * 100) / 100) };
+    }
+    const tNeg = trendLineV(negPcts, dates.length);
+
+    // Bar + trend (single Y axis)
+    Plotly.newPlot('chartNegStore', [
+        { x: dates, y: negPcts, name: '负毛利占比', type: 'bar', marker: { color: negPcts.map(v => v > 30 ? '#E86452' : v > 15 ? '#F6BD16' : '#5AD8A6') } },
+        { x: tNeg.x, y: tNeg.y, name: '趋势', type: 'scatter', mode: 'lines', line: { color: '#E86452', width: 2, dash: 'dot' }, showlegend: true }
+    ], {
+        ...plotlyLayout, height: chartH + 40, barmode: 'group',
+        xaxis: { ...plotlyLayout.xaxis, title: '日期', type: 'date', tickformat: '%m-%d', dtick: 'D1', gridcolor: 'rgba(0,0,0,0)' },
+        yaxis: { title: '负毛利占比(%)', ticksuffix: '%', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', range: [0, maxP * 1.2] },
+        legend: { orientation: 'h', y: 1.1, font: { color: '#1f2937', size: 11 } },
+        margin: { l: 60, r: 20, t: 20, b: 50 }
+    }, plotlyCfg);
+
+    // Table - sortable
+    const negRows = byDate.map(d => ({
+        date: d.日期,
+        ord: d.order_cnt || 0,
+        neg: d.neg_cnt || 0,
+        np: d.order_cnt > 0 ? ((d.neg_cnt || 0) / d.order_cnt * 100) : 0,
+        gross: d.gross_profit || 0,
+        net: d.commission_profit || 0
+    }));
+    makeSortable('negTable', negRows, [
+        {key:'date',label:'日期',type:'str'},
+        {key:'ord',label:'总单量',type:'num'},
+        {key:'neg',label:'负毛利单',type:'num'},
+        {key:'np',label:'负毛利占比',type:'pct'},
+        {key:'gross',label:'门店毛利',type:'num'},
+        {key:'net',label:'抽佣毛利',type:'num'}
+    ], function(r){
+        let cls = r.np > 30 ? 'warn' : r.np > 15 ? '' : '';
+        return '<tr><td>'+r.date+'</td><td>'+r.ord.toLocaleString()+'</td><td>'+r.neg+'</td>'
+            +'<td>'+negBadge(r.np)+'</td>'
+            +'<td>'+fmtY(r.gross)+'</td><td>'+fmtY(r.net)+'</td></tr>';
+    });
+}
+
+// ============ DELIVERY TAB ============
+function renderDelivery(data) {
+    const byDate = groupBy(data, ['日期']);
+    byDate.sort((a, b) => a.日期.localeCompare(b.日期));
+    const dates = byDate.map(d => d.日期);
+    const avgCosts = byDate.map(d => d.delivery_order_cnt > 0 ? (d.delivery_fee / d.delivery_order_cnt) : 0);
+    const delRatios = byDate.map(d => d.order_cnt > 0 ? (d.delivery_order_cnt / d.order_cnt * 100) : 0);
+    const maxC = Math.max(...avgCosts, 1);
+    const maxR = Math.max(...delRatios, 1);
+    const n = dates.length;
+
+    function trendLineV(vals) {
+        if (n < 2) return { x: dates, y: vals.map(() => null) };
+        let sx = 0, sy = 0, sxy = 0, sxx = 0;
+        for (let i = 0; i < n; i++) { sx += i; sy += vals[i]; sxy += i * vals[i]; sxx += i * i; }
+        const slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+        const intercept = (sy - slope * sx) / n;
+        return { x: dates, y: vals.map((_, i) => Math.round((slope * i + intercept) * 100) / 100) };
+    }
+    const tCost = trendLineV(avgCosts);
+    const tRatio = trendLineV(delRatios);
+
+    // 单均配送成本 + 趋势
+    Plotly.newPlot('chartDelCost', [
+        { x: dates, y: avgCosts, name: '单均配送', type: 'bar', marker: { color: '#FF9F43' } },
+        { x: tCost.x, y: tCost.y, name: '趋势', type: 'scatter', mode: 'lines', line: { color: '#FF9F43', width: 2, dash: 'dot' }, showlegend: true }
+    ], {
+        ...plotlyLayout, height: chartH + 40, barmode: 'group',
+        xaxis: { ...plotlyLayout.xaxis, title: '日期', type: 'date', tickformat: '%m-%d', dtick: 'D1', gridcolor: 'rgba(0,0,0,0)' },
+        yaxis: { title: '单均配送(¥)', ticksuffix: '¥', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', range: [0, maxC * 1.2] },
+        legend: { orientation: 'h', y: 1.1, font: { color: '#1f2937', size: 11 } },
+        margin: { l: 60, r: 20, t: 20, b: 50 }
+    }, plotlyCfg);
+
+    // 配送占比 + 趋势
+    Plotly.newPlot('chartDelRatio', [
+        { x: dates, y: delRatios, name: '配送占比', type: 'bar', marker: { color: '#5B8FF9' } },
+        { x: tRatio.x, y: tRatio.y, name: '趋势', type: 'scatter', mode: 'lines', line: { color: '#5B8FF9', width: 2, dash: 'dot' }, showlegend: true }
+    ], {
+        ...plotlyLayout, height: chartH + 40, barmode: 'group',
+        xaxis: { ...plotlyLayout.xaxis, title: '日期', type: 'date', tickformat: '%m-%d', dtick: 'D1', gridcolor: 'rgba(0,0,0,0)' },
+        yaxis: { title: '配送占比(%)', ticksuffix: '%', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', range: [0, maxR * 1.2] },
+        legend: { orientation: 'h', y: 1.1, font: { color: '#1f2937', size: 11 } },
+        margin: { l: 60, r: 20, t: 20, b: 50 }
+    }, plotlyCfg);
+
+    // Table - sortable
+    const delRows = byDate.map(d => ({
+        date: d.日期,
+        ord: d.order_cnt || 0,
+        delCnt: d.delivery_order_cnt || 0,
+        ratio: d.order_cnt > 0 ? (d.delivery_order_cnt / d.order_cnt * 100) : 0,
+        fee: d.delivery_fee || 0,
+        avg: d.delivery_order_cnt > 0 ? (d.delivery_fee / d.delivery_order_cnt) : 0
+    }));
+    makeSortable('delTable', delRows, [
+        {key:'date',label:'日期',type:'str'},
+        {key:'ord',label:'总单量',type:'num'},
+        {key:'delCnt',label:'配送单数',type:'num'},
+        {key:'ratio',label:'配送占比',type:'pct'},
+        {key:'fee',label:'总配送费',type:'num'},
+        {key:'avg',label:'单均配送',type:'num'}
+    ], function(r){
+        const avgCls = r.avg > 10 ? 'cell-bad' : r.avg > 6 ? 'cell-warn' : 'cell-good';
+        return '<tr><td>'+r.date+'</td><td>'+r.ord.toLocaleString()+'</td><td>'+r.delCnt.toLocaleString()
+            +'</td><td>'+r.ratio.toFixed(1)+'%</td><td>'+fmtY(r.fee)+'</td><td class="'+avgCls+'">¥'+r.avg.toFixed(2)+'</td></tr>';
+    });
+}
+
+// ============ PAGE SWITCHER ============
+function switchPage(name, btn) {
+    document.querySelectorAll('.page-btn').forEach(b => { b.classList.remove('active'); b.style.background = 'var(--bg)'; b.style.color = 'var(--text-dim)'; });
+    btn.classList.add('active'); btn.style.background = 'var(--card)'; btn.style.color = 'var(--text)';
+    document.getElementById('page-ops').style.display = name === 'ops' ? 'block' : 'none';
+    document.getElementById('page-product').style.display = name === 'product' ? 'block' : 'none';
+    if (name === 'product') renderProduct();
+}
+function switchProdTab(name, btn) {
+    document.querySelectorAll('#prod-tab-'+name.split('-')[0] +' .tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('prod-tab-turnover').classList.toggle('active', name === 'turnover');
+    document.getElementById('prod-tab-sales').classList.toggle('active', name === 'sales');
+}
+
+// ============ PRODUCT RENDERING ============
+let selectedProdPeriod = productPeriods.length > 0 ? productPeriods[productPeriods.length - 1] : '202605';
+
+function initProductPeriodChips() {
+    if (!productPeriods.length) return;
+    const container = document.getElementById('prodPeriodChips');
+    container.innerHTML = '';
+    productPeriods.forEach(p => {
+        const chip = document.createElement('span');
+        chip.className = 'chip' + (p === selectedProdPeriod ? ' active' : '');
+        const label = p.length >= 6 ? p.substring(0,4) + '-' + p.substring(4,6) : p;
+        chip.textContent = label;
+        chip.onclick = function() {
+            selectedProdPeriod = p;
+            initProductPeriodChips();
+            renderProduct();
+        };
+        container.appendChild(chip);
+    });
+}
+
+function getPeriodData(period) {
+    return allProductData.filter(r => String(r.period) === String(period));
+}
+function getPrevPeriod(period) {
+    const idx = productPeriods.indexOf(String(period));
+    return idx > 0 ? productPeriods[idx - 1] : null;
+}
+
+function renderProduct() {
+    const pData = getPeriodData(selectedProdPeriod);
+    if (!pData.length) { document.getElementById('prodKpiGrid').innerHTML = '<p style="color:var(--text-dim);padding:20px;">暂无商品数据</p>'; return; }
+
+    // Init period chips
+    initProductPeriodChips();
+
+    const all = pData.filter(r => r.store_name === '全部门店');
+    const catOnly = all.filter(r => ['食品','日化','百货'].includes(r.cat));
+    const food = all.filter(r => r.cat === '食品');
+    const daily = all.filter(r => r.cat === '日化');
+    const goods = all.filter(r => r.cat === '百货');
+
+    function sum1(arr, k) { return arr.reduce((s, r) => s + (r[k] || 0), 0); }
+
+    const tSku = Math.round(sum1(catOnly, 'sku_total'));
+    const tTurn = sum1(catOnly, 'sku_total') > 0 ? (sum1(catOnly, 'sku_active') / sum1(catOnly, 'sku_total') * 100) : 0;
+    const tVal = sum1(catOnly, 'goods_value');
+    const tRev = sum1(catOnly, 'revenue');
+    const tProf = sum1(catOnly, 'profit');
+    const tMarg = tRev > 0 ? (tProf / tRev * 100) : 0;
+
+    // Period-over-period: compare with previous period
+    const prev = getPrevPeriod(selectedProdPeriod);
+    const prevData = prev ? getPeriodData(prev) : [];
+    const prevAll = prevData.filter(r => r.store_name === '全部门店');
+    const prevCat = prevAll.filter(r => ['食品','日化','百货'].includes(r.cat));
+    const pSku = Math.round(sum1(prevCat, 'sku_total'));
+    const pTurn = sum1(prevCat, 'sku_total') > 0 ? (sum1(prevCat, 'sku_active') / sum1(prevCat, 'sku_total') * 100) : 0;
+    const pVal = sum1(prevCat, 'goods_value');
+    const pProf = sum1(prevCat, 'profit');
+    const pMarg = sum1(prevCat, 'revenue') > 0 ? (sum1(prevCat, 'profit') / sum1(prevCat, 'revenue') * 100) : 0;
+
+    function momStr(cur, pv, unit) {
+        if (pv === 0) return '<div class="kpi-sub" style="color:var(--text-dim);">--</div>';
+        const chg = ((cur - pv) / pv * 100).toFixed(1);
+        const cls = chg > 0 ? 'green' : 'red';
+        const sign = chg > 0 ? '↑' : '↓';
+        return '<div class="kpi-sub" style="color:var(--'+cls+');">环比 ' + sign + Math.abs(chg) + '%</div>';
+    }
+
+    document.getElementById('prodKpiGrid').innerHTML =
+        '<div class="kpi-card blue"><div class="kpi-label">SKU总数</div><div class="kpi-value">' + tSku.toLocaleString() + '</div>'+momStr(tSku, pSku)+'</div>' +
+        '<div class="kpi-card accent"><div class="kpi-label">动销率</div><div class="kpi-value">' + tTurn.toFixed(1) + '%</div>'+momStr(tTurn, pTurn)+'</div>' +
+        '<div class="kpi-card orange"><div class="kpi-label">货值</div><div class="kpi-value">' + fmtY(tVal) + '</div>'+momStr(tVal, pVal)+'</div>' +
+        '<div class="kpi-card green"><div class="kpi-label">毛利</div><div class="kpi-value">' + fmtY(tProf) + '</div>'+momStr(tProf, pProf)+'</div>' +
+        '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">' + tMarg.toFixed(1) + '%</div>'+momStr(tMarg, pMarg)+'</div>';
+
+    // Turnover chart
+    const cats = [food, daily, goods].map((g, i) => ({
+        name: ['食品', '日化', '百货'][i],
+        turnover: g.length > 0 ? (sum1(g, 'sku_active') / sum1(g, 'sku_total') * 100) : 0,
+        value: sum1(g, 'goods_value'),
+        margin: sum1(g, 'revenue') > 0 ? (sum1(g, 'profit') / sum1(g, 'revenue') * 100) : 0
+    }));
+    Plotly.newPlot('chartProdCatTurnover', [
+        { y: cats.map(c => c.name), x: cats.map(c => c.turnover), name: '动销率',
+          type: 'bar', orientation: 'h', marker: { color: '#5B8FF9' },
+          text: cats.map(c => c.turnover.toFixed(1) + '%'), textposition: 'outside', textfont: { color: '#1f2937', size: 11 } },
+        { y: cats.map(c => c.name), x: cats.map(c => c.margin), name: '毛利率',
+          type: 'bar', orientation: 'h', marker: { color: '#FF9F43' },
+          text: cats.map(c => c.margin.toFixed(1) + '%'), textposition: 'outside', textfont: { color: '#1f2937', size: 11 } }
+    ], {
+        ...plotlyLayout, barmode: 'group', height: 250,
+        xaxis: { ...plotlyLayout.xaxis, title: '百分比(%)', ticksuffix: '%', gridcolor: 'rgba(0,0,0,0)', range: [0, 100] },
+        yaxis: { gridcolor: 'rgba(0,0,0,0)' },
+        legend: { orientation: 'h', y: 1.15, x: 0.5, xanchor: 'center' },
+        margin: { l: 60, r: 20, t: 10, b: 40 }
+    }, plotlyCfg);
+
+    // Store turnover ranking
+    const storeMap = {};
+    pData.forEach(r => {
+        if (r.store_name === '全部门店') return;
+        if (r.cat === '总计') return;  // skip 总计 rows to avoid double-counting
+        if (!storeMap[r.store_name]) storeMap[r.store_name] = { n: 0, a: 0, v: 0 };
+        storeMap[r.store_name].n += r.sku_total || 0;
+        storeMap[r.store_name].a += r.sku_active || 0;
+        storeMap[r.store_name].v += r.goods_value || 0;
+    });
+    const sList = Object.entries(storeMap).map(([n, d]) => ({
+        name: n && n.includes('（') ? n.split('（')[1].replace('）', '') : (n || '').split('-').pop() || n,
+        turnover: d.n > 0 ? (d.a / d.n * 100) : 0,
+        value: d.v
+    })).filter(s => s.turnover > 0).sort((a, b) => b.turnover - a.turnover);
+
+    Plotly.newPlot('chartProdStoreTurnover', [{
+        y: sList.map(s => s.name),
+        x: sList.map(s => s.turnover),
+        type: 'bar', orientation: 'h',
+        marker: { color: sList.map(s => s.turnover > 60 ? '#5AD8A6' : s.turnover > 40 ? '#F6BD16' : '#E86452') }
+    }], {
+        ...plotlyLayout, height: Math.max(300, sList.length * 24),
+        xaxis: { ...plotlyLayout.xaxis, title: '动销率(%)', ticksuffix: '%', gridcolor: 'rgba(0,0,0,0)', zerolinecolor: '#2a2d3a', range: [0, 100] },
+        yaxis: { automargin: true, gridcolor: 'rgba(0,0,0,0)' },
+        margin: { l: 100, r: 20, t: 10, b: 40 }
+    }, plotlyCfg);
+
+    // --- 一级分类动销明细表 ---
+    if (rawcatData.length > 0) {
+        const sorted = rawcatData.filter(r => r.cat && r.cat !== '总计' && r.cat !== '汇总').sort((a, b) => {
+            if (a.cat !== b.cat) return a.cat.localeCompare(b.cat);
+            return a.raw_cat.localeCompare(b.raw_cat);
+        });
+        let t = '<table><tr><th>品类</th><th>一级分类</th><th>无动销(SKU)</th><th>有动销(SKU)</th><th>SKU总计</th><th>动销率</th></tr>';
+        sorted.forEach(r => {
+            const inactive = Math.round(r.sku_total - r.sku_active);
+            const catLabel = { '食品': '食品', '日化': '日化', '百货': '百货' }[r.cat] || r.cat;
+            t += '<tr><td>' + catLabel + '</td><td>' + (r.raw_cat || '') +
+                '</td><td>' + inactive.toLocaleString() + '</td><td>' + Math.round(r.sku_active || 0).toLocaleString() +
+                '</td><td>' + Math.round(r.sku_total || 0).toLocaleString() +
+                '</td><td>' + (r.turnover_rate || 0).toFixed(1) + '%</td></tr>';
+        });
+        t += '</table>';
+        document.getElementById('prodRawcatTable').innerHTML = t;
+    }
+
+    // --- 品类销售汇总表 ---
+    const catRows = all.filter(r => ['食品','日化','百货'].includes(r.cat));
+    const totalRev = sum(catRows, 'revenue');
+    const totalProf = sum(catRows, 'profit');
+    const totalSku = Math.round(sum(catRows, 'sku_total'));
+    const totalActive = Math.round(sum(catRows, 'sku_active'));
+    const totalQty = Math.round(sum(catRows, 'qty'));
+    let st = '<table><tr><th>品类</th><th>SKU总数</th><th>有动销SKU</th><th>动销率</th><th>销量</th><th>销售额</th><th>销售额占比</th><th>毛利</th><th>毛利占比</th><th>毛利率</th></tr>';
+    catRows.sort((a,b) => (b.revenue||0)-(a.revenue||0)).forEach(r => formatRow(r, false));
+    // 总计行
+    formatRow({cat:'总计', sku_total:totalSku, sku_active:totalActive, turnover_rate: totalSku>0?(totalActive/totalSku*100):0, qty:totalQty, revenue:totalRev, profit:totalProf, margin: totalRev>0?(totalProf/totalRev*100):0}, true);
+    st += '</table>';
+    document.getElementById('prodSalesSummary').innerHTML = st;
+    function formatRow(r, isTotal) {
+        const revPct = totalRev > 0 ? (r.revenue/totalRev*100) : 0;
+        const profPct = totalProf > 0 ? (r.profit/totalProf*100) : 0;
+        st += '<tr' + (isTotal?' style="font-weight:bold;background:rgba(0,0,0,0.03)"':'') +
+            '><td>' + r.cat + '</td><td>' + Math.round(r.sku_total||0).toLocaleString() +
+            '</td><td>' + Math.round(r.sku_active||0).toLocaleString() +
+            '</td><td>' + (r.turnover_rate||0).toFixed(1) + '%</td><td>' + Math.round(r.qty||0).toLocaleString() +
+            '</td><td>' + fmtY(r.revenue||0) + '</td><td>' + revPct.toFixed(1) + '%</td><td>' + fmtY(r.profit||0) +
+            '</td><td>' + profPct.toFixed(1) + '%</td><td>' + (r.margin||0).toFixed(1) + '%</td></tr>';
+    }
+
+    // --- 一级分类销售明细表 ---
+    if (rawcatCombinedData.length > 0) {
+        const detail = rawcatCombinedData.filter(r => r.revenue > 0).sort((a, b) => (b.revenue || 0) - (a.revenue || 0));
+        const dtRev = detail.reduce((s,r) => s + (r.revenue||0), 0);
+        const dtProf = detail.reduce((s,r) => s + (r.profit||0), 0);
+        let dt = '<table><tr><th>品类</th><th>一级分类</th><th>销量</th><th>销售额</th><th>销售额占比</th><th>毛利</th><th>毛利占比</th><th>毛利率</th></tr>';
+        detail.forEach(r => {
+            const catLabel = { '食品': '食品', '日化': '日化', '百货': '百货' }[r.cat] || r.cat;
+            const revPct = dtRev > 0 ? (r.revenue/dtRev*100) : 0;
+            const profPct = dtProf > 0 ? (r.profit/dtProf*100) : 0;
+            dt += '<tr><td>' + catLabel + '</td><td>' + (r.raw_cat || '') +
+                '</td><td>' + Math.round(r.qty||0).toLocaleString() +
+                '</td><td>' + fmtY(r.revenue||0) + '</td><td>' + revPct.toFixed(1) + '%</td><td>' + fmtY(r.profit||0) +
+                '</td><td>' + profPct.toFixed(1) + '%</td><td>' + (r.margin||0).toFixed(1) + '%</td></tr>';
+        });
+        dt += '</table>';
+        document.getElementById('prodSalesDetail').innerHTML = dt;
+    }
 }
 
 // ============ REFRESH ============
 function refresh() {
     const data=getFiltered(), pf=getFilteredPromo();
+    let dr = dateFrom === dateTo ? dateFrom : dateFrom + ' ~ ' + dateTo;
+    document.querySelectorAll('.section-date-tag').forEach(el => { el.textContent = ' (' + dr + ')'; });
+    const prev=getPrevData(data);
+    renderSummary(data, prev);
+    renderAlerts(data, prev);
     renderKPIs(data); renderStore(data); renderChannel(data); renderTimeAnalysis(data);
+    renderNeg(data); renderDelivery(data);
 }
+
+// ============ KPI DRILL-DOWN MODAL ============
+function openModal(kpiType) {
+    const data = getFiltered();
+    const stores = groupBy(data, ['store_name']);
+    const titleMap = {
+        order: '各门店单量排行', revenue: '各门店实收排行', aov: '门店客单价对比',
+        store_profit: '各门店毛利排行', comm_profit: '各门店抽佣毛利排行',
+        promo: '各门店推广费明细', neg: '各门店负毛利情况', delivery: '各门店配送成本对比'
+    };
+    document.getElementById('modalTitle').textContent = titleMap[kpiType] || '门店明细';
+
+    let chartData, chartTitle, color, vKey, vLabel;
+    switch(kpiType) {
+        case 'order':
+            stores.sort((a,b)=>b.order_cnt-a.order_cnt);
+            chartTitle='单量'; vKey='order_cnt'; color='#5B8FF9'; vLabel='单';
+            break;
+        case 'revenue':
+            stores.sort((a,b)=>b.revenue-a.revenue);
+            chartTitle='实收'; vKey='revenue'; color='#5B8FF9'; vLabel='元';
+            break;
+        case 'aov':
+            stores.sort((a,b)=>((b.revenue/(b.order_cnt||1))-(a.revenue/(a.order_cnt||1))));
+            chartTitle='客单价'; color='#6C8EF2'; vLabel='元';
+            chartData = stores.map(s=>({n:short(s.store_name), v:(s.revenue/(s.order_cnt||1))}));
+            break;
+        case 'store_profit':
+            stores.sort((a,b)=>b.real_profit-a.real_profit);
+            chartTitle='门店毛利'; vKey='real_profit'; color='#5AD8A6'; vLabel='元';
+            break;
+        case 'comm_profit':
+            stores.sort((a,b)=>b.commission_profit-a.commission_profit);
+            chartTitle='抽佣毛利'; vKey='commission_profit'; color='#5AD8A6'; vLabel='元';
+            break;
+        case 'promo':
+            stores.sort((a,b)=>b.promo_fee-a.promo_fee);
+            chartTitle='推广费'; vKey='promo_fee'; color='#E86452'; vLabel='元';
+            break;
+        case 'neg':
+            stores.sort((a,b)=>(b.neg_cnt/(b.order_cnt||1))-(a.neg_cnt/(a.order_cnt||1)));
+            chartTitle='负毛利占比'; color='#E86452'; vLabel='%';
+            chartData = stores.map(s=>({n:short(s.store_name), v:s.order_cnt>0?((s.neg_cnt||0)/s.order_cnt*100):0}));
+            break;
+        case 'delivery':
+            stores.sort((a,b)=>((b.delivery_fee/(b.delivery_order_cnt||1))-(a.delivery_fee/(a.delivery_order_cnt||1))));
+            chartTitle='单均配送成本'; color='#FF9F43'; vLabel='元';
+            chartData = stores.map(s=>({n:short(s.store_name), v:(s.delivery_order_cnt>0?(s.delivery_fee/s.delivery_order_cnt):0)}));
+            break;
+    }
+    if (!chartData) chartData = stores.map(s=>({n:short(s.store_name), v:s[vKey]||0}));
+    const vals = chartData.map(d=>d.v);
+    const names = chartData.map(d=>d.n);
+    const maxV = Math.max(...vals, 1);
+    const yPad = maxV * 0.25; // 顶部留25%空间给标签
+
+    // Build content — 降序表格
+    const tableData = chartData.map(d=>({n:d.n, v:d.v})).sort((a,b)=>b.v-a.v);
+    const tabMaxV = Math.max(...tableData.map(d=>d.v), 1);
+    let body = '<div class="modal-chart" id="modalChart"></div>';
+    body += '<div class="table-scroll"><table><tr><th>门店</th><th>'+chartTitle+'</th>';
+    if (kpiType==='order'||kpiType==='revenue'||kpiType==='store_profit'||kpiType==='comm_profit'||kpiType==='promo') {
+        body += '<th>占比</th>';
+    }
+    body += '</tr>';
+    const totalV = vals.reduce((s,v)=>s+v, 0);
+    tableData.forEach((d, i) => {
+        const barW = Math.round(d.v / tabMaxV * 120);
+        const vDisplay = kpiType==='aov'||kpiType==='delivery' ? '¥'+d.v.toFixed(1) :
+                         kpiType==='neg' ? d.v.toFixed(1)+'%' :
+                         d.v.toLocaleString(undefined, {maximumFractionDigits: 0});
+        const pctStr = totalV > 0 ? ((d.v/totalV*100).toFixed(1)+'%') : '';
+        const cls = kpiType==='neg' ? (d.v>30?'cell-bad':d.v>15?'cell-warn':'cell-good') : '';
+        body += '<tr><td>'+d.n+'</td>';
+        body += '<td class="'+cls+'"><span class="cell-bar-wrap"><span class="cell-bar" style="width:'+barW+'px;background:'+color+'"></span>'+vDisplay+'</span></td>';
+        if (pctStr) body += '<td>'+pctStr+'</td>';
+        body += '</tr>';
+    });
+    body += '</table></div>';
+    document.getElementById('modalBody').innerHTML = body;
+    document.getElementById('kpiModal').classList.add('show');
+
+    // Render chart — Plotly原生降序，不要手动排序
+    setTimeout(() => {
+        Plotly.newPlot('modalChart', [{
+            x: names, y: vals, type: 'bar',
+            cliponaxis: false,
+            marker: { color: vals.map(v => {
+                if (kpiType==='neg') return v>30?'#E86452':v>15?'#F6BD16':'#5AD8A6';
+                if (kpiType==='promo') return '#E86452';
+                return color;
+            })},
+            text: vals.map(v => kpiType==='aov'||kpiType==='delivery'?'¥'+v.toFixed(1):kpiType==='neg'?v.toFixed(1)+'%':v.toLocaleString()),
+            textposition: 'outside',
+            textfont: { size: 10, color: '#9ca3af' }
+        }], {
+            ...plotlyLayout,
+            height: 310,
+            xaxis: { ...plotlyLayout.xaxis, tickangle: -45, categoryorder: 'total descending' },
+            yaxis: { ...plotlyLayout.yaxis, title: vLabel, gridcolor: '#2a2d3a', range: [0, maxV + yPad], automargin: true },
+            margin: { l: 50, r: 20, t: 50, b: 80 }
+        }, plotlyCfg);
+    }, 50);
+}
+
+function closeModal() {
+    document.getElementById('kpiModal').classList.remove('show');
+    // Clean up Plotly chart to prevent memory leaks
+    const chartEl = document.getElementById('modalChart');
+    if (chartEl) Plotly.purge(chartEl);
+}
+
+// Click outside modal to close
+document.addEventListener('click', function(e) {
+    if (e.target.id === 'kpiModal') closeModal();
+});
+
+// KPI card click delegation
+document.getElementById('kpiGrid').addEventListener('click', function(e) {
+    const card = e.target.closest('.kpi-card.clickable');
+    if (card) {
+        const kpiType = card.getAttribute('data-kpi');
+        if (kpiType) openModal(kpiType);
+    }
+});
 
 // ============ INIT ============
 function initDashboard() {
@@ -823,6 +1795,7 @@ function initDashboard() {
     document.getElementById('updateTime').textContent = '数据更新: ' + allDates[allDates.length - 1];
     refresh();
 }
+initDashboard();
 </script>
 </body>
 </html>'''
