@@ -194,10 +194,17 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Mi
 .kpi-grid { display:grid; gap:12px; margin-bottom:20px; }
 .kpi-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:18px; position:relative; overflow:hidden; transition:all .25s; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
 .kpi-card:hover { background:var(--card-hover); transform:translateY(-2px); box-shadow:0 4px 16px rgba(0,0,0,0.08); }
-.kpi-label { color:var(--text-dim); font-size:12px; margin-bottom:4px; }
-.kpi-value { font-size:24px; font-weight:700; letter-spacing:-0.3px; }
+.kpi-label { color:#1f2937; font-size:14px; margin-bottom:4px; font-weight:500; }
+.kpi-label.important { color:var(--red); }
+.kpi-value { font-size:24px; font-weight:700; letter-spacing:-0.3px; color:var(--blue) !important; }
 .kpi-sub { font-size:11px; margin-top:4px; }
-.accent .kpi-value { color:var(--accent); }
+.kpi-mom { font-size:12px; margin-top:3px; font-weight:500; }
+/* 名词解释 hint */
+.kpi-hint { font-size:10px; cursor:help; position:relative; color:var(--text-dim); display:inline-block; }
+.kpi-hint:hover { color:var(--accent); }
+.kpi-tip { display:none; position:absolute; top:0; left:100%; margin-left:6px; background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:4px 10px; font-size:11px; white-space:nowrap; z-index:10; color:var(--text); font-weight:400; box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+.kpi-hint:hover .kpi-tip { display:block; }
+.accent .kpi-value { color:var(--accent) !important; }
 .green .kpi-value { color:var(--green); }
 .yellow .kpi-value { color:var(--yellow); }
 .red .kpi-value { color:var(--red); }
@@ -219,7 +226,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Mi
 .table-scroll { overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:8px; border:1px solid var(--border); }
 .table-scroll table { min-width:700px; width:100%; border-collapse:collapse; font-size:12px; }
 th { text-align:left; padding:8px 10px; background:var(--bg); color:var(--text-dim); font-weight:600; border-bottom:1px solid var(--border); position:sticky; top:0; white-space:nowrap; }
-td { padding:6px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+td { padding:6px 10px; border-bottom:1px solid var(--border); white-space:nowrap; color:#1f2937; }
 tr:hover td { background:rgba(79,110,247,0.04); }
 .badge { display:inline-block; padding:2px 6px; border-radius:3px; font-size:11px; font-weight:500; }
 .badge-warn { background:rgba(239,68,68,0.1); color:var(--red); }
@@ -281,9 +288,9 @@ th.sortable::after { content:'↕'; position:absolute; right:6px; opacity:0.3; f
 th.sortable.asc::after { content:'▲'; opacity:1; color:var(--accent); }
 th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 /* Conditional formatting */
-.cell-good { color:var(--green); }
-.cell-warn { color:var(--yellow); }
-.cell-bad { color:var(--red); font-weight:600; }
+.cell-good { color:var(--green) !important; }
+.cell-warn { color:var(--yellow) !important; }
+.cell-bad { color:var(--red) !important; }
 .cell-accent { color:var(--accent); }
 /* In-cell bar */
 .cell-bar-wrap { display:flex; align-items:center; gap:6px; }
@@ -1019,29 +1026,29 @@ function renderKPIs(data) {
     const dAdc = deltaStr(parseFloat(adc), pAdc, false);
 
     document.getElementById('kpiGrid').innerHTML =
-        '<div class="kpi-card blue clickable" data-kpi="order"><div class="kpi-label">总单量</div><div class="kpi-value">'+ord.toLocaleString()+'</div><div class="kpi-sub" style="color:var(--'+dOrd.cls+')">'+dOrd.txt+'</div><div class="kpi-sparkline" id="spkOrd"></div></div>'+
-        '<div class="kpi-card accent clickable" data-kpi="revenue"><div class="kpi-label">实收</div><div class="kpi-value">'+fmtY(rev)+'</div><div class="kpi-sub" style="color:var(--'+dRev.cls+')">'+dRev.txt+'</div><div class="kpi-sparkline" id="spkRev"></div></div>'+
-        '<div class="kpi-card accent clickable" data-kpi="aov"><div class="kpi-label">实收客单</div><div class="kpi-value">¥'+aov+'</div><div class="kpi-sub" style="color:var(--'+dAov.cls+')">'+dAov.txt+'</div><div class="kpi-sparkline" id="spkAov"></div></div>'+
-        '<div class="kpi-card green clickable" data-kpi="store_profit"><div class="kpi-label">门店毛利</div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-sub" style="color:var(--'+dGp.cls+')">'+dGp.txt+'</div><div class="kpi-sparkline" id="spkGp"></div></div>'+
-        '<div class="kpi-card green clickable" data-kpi="comm_profit"><div class="kpi-label">抽佣毛利</div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-sub" style="color:var(--'+dCp.cls+')">'+dCp.txt+'</div><div class="kpi-sparkline" id="spkCp"></div></div>'+
-        '<div class="kpi-card red clickable" data-kpi="promo"><div class="kpi-label">推广</div><div class="kpi-value">¥'+(pf.toFixed(0))+'</div><div class="kpi-sub" style="color:var(--'+dPf.cls+')">'+dPf.txt+'</div><div class="kpi-sparkline" id="spkPf"></div></div>'+
-        '<div class="kpi-card orange"><div class="kpi-label">抽佣</div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-sub" style="color:var(--'+dCc.cls+')">'+dCc.txt+'</div><div class="kpi-sparkline" id="spkCc"></div></div>'+
-        '<div class="kpi-card yellow"><div class="kpi-label">毛利率</div><div class="kpi-value">'+margin+'%</div><div class="kpi-sub" style="color:var(--'+dMarg.cls+')">'+dMarg.txt+'</div><div class="kpi-sparkline" id="spkMarg"></div></div>'+
-        '<div class="kpi-card '+ngCls+' clickable" data-kpi="neg"><div class="kpi-label">负毛利占比</div><div class="kpi-value">'+negPct+'%</div><div class="kpi-sub" style="color:var(--'+dNeg.cls+')">'+dNeg.txt+'</div><div class="kpi-sparkline" id="spkNg"></div></div>'+
-        '<div class="kpi-card orange clickable" data-kpi="delivery"><div class="kpi-label">单均配送</div><div class="kpi-value">¥'+adc+'</div><div class="kpi-sub" style="color:var(--'+dAdc.cls+')">'+dAdc.txt+'</div><div class="kpi-sparkline" id="spkAdc"></div></div>';
+        '<div class="kpi-card clickable" data-kpi="order"><div class="kpi-label important">总单量 <span class="kpi-hint">📖<span class="kpi-tip">所有渠道订单总数</span></span></div><div class="kpi-value">'+ord.toLocaleString()+'</div><div class="kpi-mom" style="color:var(--'+dOrd.cls+')">环比 '+dOrd.txt+'</div><div class="kpi-sparkline" id="spkOrd"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="revenue"><div class="kpi-label">实收 <span class="kpi-hint">📖<span class="kpi-tip">客户实付金额之和</span></span></div><div class="kpi-value">'+fmtY(rev)+'</div><div class="kpi-mom" style="color:var(--'+dRev.cls+')">环比 '+dRev.txt+'</div><div class="kpi-sparkline" id="spkRev"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="aov"><div class="kpi-label">实收客单 <span class="kpi-hint">📖<span class="kpi-tip">实收÷总单量</span></span></div><div class="kpi-value">¥'+aov+'</div><div class="kpi-mom" style="color:var(--'+dAov.cls+')">环比 '+dAov.txt+'</div><div class="kpi-sparkline" id="spkAov"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="store_profit"><div class="kpi-label">门店毛利 <span class="kpi-hint">📖<span class="kpi-tip">线上毛利 - 推广费</span></span></div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-mom" style="color:var(--'+dGp.cls+')">环比 '+dGp.txt+'</div><div class="kpi-sparkline" id="spkGp"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="comm_profit"><div class="kpi-label important">抽佣毛利 <span class="kpi-hint">📖<span class="kpi-tip">门店毛利 - 平台抽佣</span></span></div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-mom" style="color:var(--'+dCp.cls+')">环比 '+dCp.txt+'</div><div class="kpi-sparkline" id="spkCp"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="promo"><div class="kpi-label">推广费 <span class="kpi-hint">📖<span class="kpi-tip">美团+饿了么推广消耗</span></span></div><div class="kpi-value">¥'+(pf.toFixed(0))+'</div><div class="kpi-mom" style="color:var(--'+dPf.cls+')">环比 '+dPf.txt+'</div><div class="kpi-sparkline" id="spkPf"></div></div>'+
+        '<div class="kpi-card"><div class="kpi-label">平台抽佣 <span class="kpi-hint">📖<span class="kpi-tip">实收 × 门店抽佣点数</span></span></div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-mom" style="color:var(--'+dCc.cls+')">环比 '+dCc.txt+'</div><div class="kpi-sparkline" id="spkCc"></div></div>'+
+        '<div class="kpi-card"><div class="kpi-label">毛利率 <span class="kpi-hint">📖<span class="kpi-tip">抽佣毛利 ÷ 实收</span></span></div><div class="kpi-value">'+margin+'%</div><div class="kpi-mom" style="color:var(--'+dMarg.cls+')">环比 '+dMarg.txt+'</div><div class="kpi-sparkline" id="spkMarg"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="neg"><div class="kpi-label">负毛利占比 <span class="kpi-hint">📖<span class="kpi-tip">线上毛利<0的单数÷总单数</span></span></div><div class="kpi-value">'+negPct+'%</div><div class="kpi-mom" style="color:var(--'+dNeg.cls+')">环比 '+dNeg.txt+'</div><div class="kpi-sparkline" id="spkNg"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="delivery"><div class="kpi-label">单均配送 <span class="kpi-hint">📖<span class="kpi-tip">三方配送费÷配送单数</span></span></div><div class="kpi-value">¥'+adc+'</div><div class="kpi-mom" style="color:var(--'+dAdc.cls+')">环比 '+dAdc.txt+'</div><div class="kpi-sparkline" id="spkAdc"></div></div>';
 
-    // Draw sparklines
+    // Draw sparklines — all blue
     setTimeout(()=>{
         drawSparkline('spkOrd',spkOrd,'blue');
-        drawSparkline('spkRev',spkRev,'accent');
-        drawSparkline('spkAov',spkAov,'accent');
-        drawSparkline('spkGp',spkGp,'green');
-        drawSparkline('spkCp',spkCp,'green');
-        drawSparkline('spkPf',spkPf,'red');
-        drawSparkline('spkCc',spkCc,'orange');
-        drawSparkline('spkMarg',spkMarg,'yellow');
-        drawSparkline('spkNg',spkNg,ngCls);
-        drawSparkline('spkAdc',spkAdc,'orange');
+        drawSparkline('spkRev',spkRev,'blue');
+        drawSparkline('spkAov',spkAov,'blue');
+        drawSparkline('spkGp',spkGp,'blue');
+        drawSparkline('spkCp',spkCp,'blue');
+        drawSparkline('spkPf',spkPf,'blue');
+        drawSparkline('spkCc',spkCc,'blue');
+        drawSparkline('spkMarg',spkMarg,'blue');
+        drawSparkline('spkNg',spkNg,'blue');
+        drawSparkline('spkAdc',spkAdc,'blue');
     },10);
 }
 
@@ -1072,29 +1079,74 @@ function renderStore(data) {
         {x:names,y:stores.map(s=>s.commission_profit||0),name:'抽佣毛利',type:'bar',marker:{color:'#FF9F43'},yaxis:'y2',offsetgroup:1}
     ],{...plotlyLayout,barmode:'group',
         xaxis:{...plotlyLayout.xaxis,tickangle:-45},
-        yaxis:{title:'单量',gridcolor:'rgba(0,0,0,0)',zerolinecolor:'#2a2d3a',range:leftRng},
+        yaxis:{title:'单量',gridcolor:'rgba(0,0,0,0)',zerolinecolor:'#e5e7eb',range:leftRng},
         yaxis2:{title:'抽佣毛利(元)',overlaying:'y',side:'right',gridcolor:'rgba(0,0,0,0)',range:rightRng},
         margin:{l:50,r:60,t:20,b:100}
     },plotlyCfg);
 
-    // Compute derived values for table
+    // Get prev period data for MoM comparison — all metrics
+    const prevStoreData = getPrevData(data);
+    const prevStoreMap = {};
+    prevStoreData.forEach(r => {
+        const sn = r.store_name || '';
+        if (!prevStoreMap[sn]) prevStoreMap[sn] = {ord:0, rev:0, rp:0, cf:0, cp:0, neg:0, doc:0, df:0};
+        prevStoreMap[sn].ord += r.order_cnt||0;
+        prevStoreMap[sn].rev += r.revenue||0;
+        prevStoreMap[sn].rp += r.real_profit||0;
+        prevStoreMap[sn].cf += r.commission_fee||0;
+        prevStoreMap[sn].cp += r.commission_profit||0;
+        prevStoreMap[sn].neg += r.neg_cnt||0;
+        prevStoreMap[sn].doc += r.delivery_order_cnt||0;
+        prevStoreMap[sn].df += r.delivery_fee||0;
+    });
+
+    function momPct(cur, prev) {
+        if (prev===0) return '--';
+        return ((cur-prev)/Math.abs(prev)*100);
+    }
+
+    // Compute derived values for table — all metrics with MoM
     const rows=stores.map(s=>{
         const rev=s.revenue||0, rp=s.real_profit||0, cf=s.commission_fee||0, cp=s.commission_profit||0;
+        const ord=s.order_cnt||0, aov=ord>0?(rev/ord):0;
+        const delCost=(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt):0;
+        const margin=rev>0?(cp/rev*100):0;
+        const negPct=ord>0?((s.neg_cnt||0)/ord*100):0;
+        const p = prevStoreMap[s.store_name] || {ord:0, rev:0, rp:0, cf:0, cp:0, neg:0, doc:0, df:0};
+        const pAov = p.ord>0?(p.rev/p.ord):0;
+        const pDelCost = p.doc>0?(p.df/p.doc):0;
+        const pMargin = p.rev>0?(p.cp/p.rev*100):0;
+        const pNegPct = p.ord>0?((p.neg||0)/p.ord*100):0;
         return {
             name:short(s.store_name),
-            ord:s.order_cnt||0,
-            rev:rev,
-            gross:rp,
-            comm:cf,
-            net:cp,
-            margin:rev>0?(cp/rev*100):0,
-            aov:rev>0?(rev/(s.order_cnt||1)):0,
-            delCost:(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt):0,
-            negPct:(s.order_cnt||0)>0?((s.neg_cnt||0)/s.order_cnt*100):0
+            ord, rev, gross:rp, comm:cf, net:cp,
+            margin, aov, delCost, negPct,
+            // All MoM values
+            mom: {
+                ord: momPct(ord, p.ord),
+                rev: momPct(rev, p.rev),
+                gross: momPct(rp, p.rp),
+                comm: momPct(cf, p.cf),
+                net: momPct(cp, p.cp),
+                margin: momPct(margin, pMargin),
+                aov: momPct(aov, pAov),
+                delCost: momPct(delCost, pDelCost),
+                negPct: momPct(negPct, pNegPct)
+            }
         };
     });
-    const maxRev=Math.max(...rows.map(r=>r.rev),1);
-    const maxTableOrd=Math.max(...rows.map(r=>r.ord),1);
+
+    // Map column index → mom key
+    const momKeyMap = {1:'ord',2:'rev',3:'gross',4:'comm',5:'net',6:'margin',7:'aov',8:'delCost',9:'negPct'};
+
+    function getMomDisplay(r) {
+        const state = tableSortState['storeTable'] || {col:-1};
+        const mk = momKeyMap[state.col] || 'net';
+        const v = r.mom[mk];
+        if (v==='--') return '--';
+        const cls = v>0 ? 'cell-good' : (v<0 ? 'cell-bad' : '');
+        return '<span class="'+cls+'">'+(v>0?'↑':v<0?'↓':'')+Math.abs(v).toFixed(1)+'%</span>';
+    }
 
     makeSortable('storeTable', rows, [
         {key:'name',label:'门店',type:'str'},
@@ -1106,29 +1158,29 @@ function renderStore(data) {
         {key:'margin',label:'毛利率',type:'pct'},
         {key:'aov',label:'实收客单',type:'num'},
         {key:'delCost',label:'配送成本',type:'num'},
-        {key:'negPct',label:'负毛利',type:'pct'}
+        {key:'negPct',label:'负毛利',type:'pct'},
+        {key:'mom_net',label:'环比',type:'pct'}
     ], function(r,i){
-        const ordBarPct=(r.ord/maxTableOrd*60).toFixed(0);
-        const revBarPct=(r.rev/maxRev*60).toFixed(0);
-        const delCls=r.delCost>8?'cell-bad':r.delCost>5?'cell-warn':'';
+        const marginCls=parseFloat(r.margin)<10?'cell-bad':'';
+        const negCls=parseFloat(r.negPct)>35?'cell-bad':'';
         return '<tr>'
             +'<td>'+r.name+'</td>'
-            +'<td><span class="cell-bar-wrap"><span class="cell-bar blue" style="width:'+ordBarPct+'px"></span>'+r.ord.toLocaleString()+'</span></td>'
+            +'<td>'+r.ord.toLocaleString()+'</td>'
             +'<td>'+fmtY(r.rev)+'</td>'
-            +'<td><span class="'+numCls(r.gross,[0,1000],false)+'">'+fmtY(r.gross)+'</span></td>'
-            +'<td class="cell-bad">'+fmtY(r.comm)+'</td>'
-            +'<td><span class="'+numCls(r.net,[0,1000],false)+'">'+fmtY(r.net)+'</span></td>'
-            +'<td><span class="'+numCls(r.margin,[10,20],false)+'">'+r.margin.toFixed(1)+'%</span></td>'
+            +'<td>'+fmtY(r.gross)+'</td>'
+            +'<td>'+fmtY(r.comm)+'</td>'
+            +'<td>'+fmtY(r.net)+'</td>'
+            +'<td class="'+marginCls+'">'+r.margin.toFixed(1)+'%</td>'
             +'<td>¥'+r.aov.toFixed(1)+'</td>'
-            +'<td class="'+delCls+'">¥'+r.delCost.toFixed(1)+'</td>'
-            +'<td>'+negBadge(r.negPct)+'</td>'
+            +'<td>¥'+r.delCost.toFixed(1)+'</td>'
+            +'<td class="'+negCls+'">'+r.negPct.toFixed(1)+'%</td>'
+            +'<td>'+getMomDisplay(r)+'</td>'
             +'</tr>';
     });
 }
 
 function negBadge(np) {
-    if(np>35) return '<span class="badge badge-warn"><span class="anomaly-dot red"></span>'+np.toFixed(1)+'%</span>';
-    if(np>25) return '<span class="badge badge-warn">'+np.toFixed(1)+'%</span>';
+    if(np>35) return '<span class="badge badge-warn">'+np.toFixed(1)+'%</span>';
     if(np>15) return '<span class="anomaly-tag info">'+np.toFixed(1)+'%</span>';
     return '<span class="badge badge-ok">'+np.toFixed(1)+'%</span>';
 }
@@ -1755,14 +1807,14 @@ function openModal(kpiType) {
                 if (kpiType==='promo') return '#E86452';
                 return color;
             })},
-            text: vals.map(v => kpiType==='aov'||kpiType==='delivery'?'¥'+v.toFixed(1):kpiType==='neg'?v.toFixed(1)+'%':v.toLocaleString()),
+            text: vals.map(v => kpiType==='aov'||kpiType==='delivery'?'¥'+v.toFixed(2):kpiType==='neg'||kpiType==='margin'?v.toFixed(2)+'%':v.toLocaleString(undefined,{maximumFractionDigits:0})),
             textposition: 'outside',
             textfont: { size: 10, color: '#9ca3af' }
         }], {
             ...plotlyLayout,
             height: 310,
-            xaxis: { ...plotlyLayout.xaxis, tickangle: -45, categoryorder: 'total descending' },
-            yaxis: { ...plotlyLayout.yaxis, title: vLabel, gridcolor: '#2a2d3a', range: [0, maxV + yPad], automargin: true },
+            xaxis: { ...plotlyLayout.xaxis, tickangle: -45, categoryorder: 'total ascending' },
+            yaxis: { ...plotlyLayout.yaxis, title: vLabel, gridcolor: '#e5e7eb', range: [0, maxV + yPad], automargin: true, tickformat: kpiType==='neg'||kpiType==='margin'?'.2f':kpiType==='aov'||kpiType==='delivery'?'.2f':',d' },
             margin: { l: 50, r: 20, t: 50, b: 80 }
         }, plotlyCfg);
     }, 50);

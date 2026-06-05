@@ -208,11 +208,12 @@ def process_orders(order_paths, revenue_col='预计收入'):
         for mf_fp in files['mt_finance']:
             mf = pd.read_excel(mf_fp, header=1)
             if '交易类型' not in mf.columns: continue
-            mf = mf[mf['交易类型'] == '配送费用'].copy()
-            for _, r in mf.iterrows():
+            mf_del = mf[mf['交易类型'].isin(['配送费用', '配送小费'])].copy()
+            for _, r in mf_del.iterrows():
                 oid = str(r['订单号']).strip()
                 fee = abs(r['商家应收款（结算金额）'])
-                if fee > 0: mt_delivery[oid] = fee
+                if fee > 0:
+                    mt_delivery[oid] = mt_delivery.get(oid, 0) + fee
 
         if mt_delivery:
             no_fee = df[(df['渠道名称']=='美团闪购') & (df['三方配送费']==0)]
