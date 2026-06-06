@@ -36,9 +36,12 @@ def clean(records):
         row = {}
         for k, v in r.items():
             if pd.isna(v): row[k] = 0
-            elif hasattr(v, 'is_integer'): row[k] = int(v)
-            elif hasattr(v, 'is_real'): row[k] = round(float(v), 2)
-            else: row[k] = v
+            else:
+                try:
+                    fv = float(v)
+                    if fv == int(fv): row[k] = int(fv)
+                    else: row[k] = round(fv, 2)
+                except: row[k] = v
         out.append(row)
     return out
 
@@ -442,7 +445,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
         </div>
         <div class="row">
             <div class="chart-section"><h3>各渠道实收</h3><div id="chartChannelRev"></div></div>
-            <div class="chart-section"><h3>各渠道平台抽佣</h3><div id="chartChannelComm"></div></div>
+            <div class="chart-section"><h3>各渠道公司抽佣</h3><div id="chartChannelComm"></div></div>
         </div>
         <div class="chart-section"><h3>渠道明细 <span class="section-date-tag"></span><button class="export-btn" onclick="exportTable('channelTable','渠道明细')">📥 导出Excel</button></h3><div class="table-scroll" id="channelTable"></div></div>
     </div>
@@ -489,10 +492,34 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 <script>
 // ============ EXPORT ============
 function exportTable(tableId, filename) {
-    const table = document.getElementById(tableId).querySelector('table');
-    if(!table) return;
-    const wb = XLSX.utils.table_to_book(table, {sheet:'明细'});
-    XLSX.writeFile(wb, filename + '.xlsx');
+    const container = document.getElementById(tableId);
+    if (!container) return;
+    const table = container.querySelector('table');
+    if (!table) return;
+
+    // 检查是否有牵牛花门店ID（data-qn属性）
+    const qnRows = table.querySelectorAll('tr[data-qn]');
+    if (qnRows.length > 0) {
+        // 有门店ID：手动构建带牵牛花门店ID列的sheet
+        const headers = [];
+        table.querySelectorAll('tr:first-child th').forEach(th => headers.push(th.textContent.trim()));
+        headers.unshift('牵牛花门店ID');
+
+        const data = [];
+        table.querySelectorAll('tr[data-qn]').forEach(tr => {
+            const row = [tr.getAttribute('data-qn') || ''];
+            tr.querySelectorAll('td').forEach(td => row.push(td.textContent.trim()));
+            data.push(row);
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet([headers, ...data]);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '明细');
+        XLSX.writeFile(wb, filename + '.xlsx');
+    } else {
+        const wb = XLSX.utils.table_to_book(table, {sheet:'明细'});
+        XLSX.writeFile(wb, filename + '.xlsx');
+    }
 }
 
 // Export per-store ABC category turnover data (from productData, no extra embedded data)
@@ -500,6 +527,7 @@ function exportStoreCat() {
     const storeCat = getPeriodData(selectedProdPeriod).filter(r => r.store_name !== '全部门店' && ['食品','日化','百货'].includes(r.cat));
     if (!storeCat.length) { alert('暂无门店品类数据'); return; }
     const rows = storeCat.map(r => ({
+        '牵牛花门店ID': storeQnMap[r.store_name] || '',
         '门店': r.store_name,
         '品类': r.cat,
         'SKU总数': Math.round(r.sku_total || 0),
@@ -513,7 +541,7 @@ function exportStoreCat() {
         '毛利率': parseFloat((r.margin || 0).toFixed(1)),
     }));
     const ws = XLSX.utils.json_to_sheet(rows);
-    ws['!cols'] = [{wch:28},{wch:8},{wch:10},{wch:10},{wch:10},{wch:8},{wch:10},{wch:8},{wch:10},{wch:10},{wch:8}];
+    ws['!cols'] = [{wch:14},{wch:28},{wch:8},{wch:10},{wch:10},{wch:10},{wch:8},{wch:10},{wch:8},{wch:10},{wch:10},{wch:8}];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, '门店品类动销');
     XLSX.writeFile(wb, '各门店ABC动销.xlsx');
@@ -533,6 +561,14 @@ const allChannels = ''' + channels_json + ''';
 const allDates = ''' + dates_json + ''';
 const shortNames = ''' + short_map_json + ''';
 const searchKeys = ''' + search_map_json + ''';
+
+// 门店名 → 牵牛花门店ID 映射（导出Excel时用）
+const storeQnMap = {};
+rawData.forEach(r => {
+    if (r.store_name && r.qn_store_id !== undefined && r.qn_store_id !== null && !storeQnMap[r.store_name]) {
+        storeQnMap[r.store_name] = String(r.qn_store_id);
+    }
+});
 
 const isMobile = window.innerWidth < 768;
 const chartH = isMobile ? 260 : 380;
@@ -1030,9 +1066,9 @@ function renderKPIs(data) {
         '<div class="kpi-card clickable" data-kpi="revenue"><div class="kpi-label">实收 <span class="kpi-hint">📖<span class="kpi-tip">客户实付金额之和</span></span></div><div class="kpi-value">'+fmtY(rev)+'</div><div class="kpi-mom" style="color:var(--'+dRev.cls+')">环比 '+dRev.txt+'</div><div class="kpi-sparkline" id="spkRev"></div></div>'+
         '<div class="kpi-card clickable" data-kpi="aov"><div class="kpi-label">实收客单 <span class="kpi-hint">📖<span class="kpi-tip">实收÷总单量</span></span></div><div class="kpi-value">¥'+aov+'</div><div class="kpi-mom" style="color:var(--'+dAov.cls+')">环比 '+dAov.txt+'</div><div class="kpi-sparkline" id="spkAov"></div></div>'+
         '<div class="kpi-card clickable" data-kpi="store_profit"><div class="kpi-label">门店毛利 <span class="kpi-hint">📖<span class="kpi-tip">线上毛利 - 推广费</span></span></div><div class="kpi-value">'+fmtY(gp)+'</div><div class="kpi-mom" style="color:var(--'+dGp.cls+')">环比 '+dGp.txt+'</div><div class="kpi-sparkline" id="spkGp"></div></div>'+
-        '<div class="kpi-card clickable" data-kpi="comm_profit"><div class="kpi-label important">抽佣毛利 <span class="kpi-hint">📖<span class="kpi-tip">门店毛利 - 平台抽佣</span></span></div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-mom" style="color:var(--'+dCp.cls+')">环比 '+dCp.txt+'</div><div class="kpi-sparkline" id="spkCp"></div></div>'+
+        '<div class="kpi-card clickable" data-kpi="comm_profit"><div class="kpi-label important">抽佣毛利 <span class="kpi-hint">📖<span class="kpi-tip">门店毛利 - 公司抽佣</span></span></div><div class="kpi-value">'+fmtY(cp)+'</div><div class="kpi-mom" style="color:var(--'+dCp.cls+')">环比 '+dCp.txt+'</div><div class="kpi-sparkline" id="spkCp"></div></div>'+
         '<div class="kpi-card clickable" data-kpi="promo"><div class="kpi-label">推广费 <span class="kpi-hint">📖<span class="kpi-tip">美团+饿了么推广消耗</span></span></div><div class="kpi-value">¥'+(pf.toFixed(0))+'</div><div class="kpi-mom" style="color:var(--'+dPf.cls+')">环比 '+dPf.txt+'</div><div class="kpi-sparkline" id="spkPf"></div></div>'+
-        '<div class="kpi-card"><div class="kpi-label">平台抽佣 <span class="kpi-hint">📖<span class="kpi-tip">实收 × 门店抽佣点数</span></span></div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-mom" style="color:var(--'+dCc.cls+')">环比 '+dCc.txt+'</div><div class="kpi-sparkline" id="spkCc"></div></div>'+
+        '<div class="kpi-card"><div class="kpi-label">公司抽佣 <span class="kpi-hint">📖<span class="kpi-tip">实收 × 门店抽佣点数</span></span></div><div class="kpi-value">'+fmtY(cc)+'</div><div class="kpi-mom" style="color:var(--'+dCc.cls+')">环比 '+dCc.txt+'</div><div class="kpi-sparkline" id="spkCc"></div></div>'+
         '<div class="kpi-card"><div class="kpi-label">毛利率 <span class="kpi-hint">📖<span class="kpi-tip">抽佣毛利 ÷ 实收</span></span></div><div class="kpi-value">'+margin+'%</div><div class="kpi-mom" style="color:var(--'+dMarg.cls+')">环比 '+dMarg.txt+'</div><div class="kpi-sparkline" id="spkMarg"></div></div>'+
         '<div class="kpi-card clickable" data-kpi="neg"><div class="kpi-label">负毛利占比 <span class="kpi-hint">📖<span class="kpi-tip">线上毛利<0的单数÷总单数</span></span></div><div class="kpi-value">'+negPct+'%</div><div class="kpi-mom" style="color:var(--'+dNeg.cls+')">环比 '+dNeg.txt+'</div><div class="kpi-sparkline" id="spkNg"></div></div>'+
         '<div class="kpi-card clickable" data-kpi="delivery"><div class="kpi-label">单均配送 <span class="kpi-hint">📖<span class="kpi-tip">三方配送费÷配送单数</span></span></div><div class="kpi-value">¥'+adc+'</div><div class="kpi-mom" style="color:var(--'+dAdc.cls+')">环比 '+dAdc.txt+'</div><div class="kpi-sparkline" id="spkAdc"></div></div>';
@@ -1119,6 +1155,7 @@ function renderStore(data) {
         const pNegPct = p.ord>0?((p.neg||0)/p.ord*100):0;
         return {
             name:short(s.store_name),
+            qn: storeQnMap[s.store_name] || '',
             ord, rev, gross:rp, comm:cf, net:cp,
             margin, aov, delCost, negPct,
             // All MoM values
@@ -1144,7 +1181,7 @@ function renderStore(data) {
         const mk = momKeyMap[state.col] || 'net';
         const v = r.mom[mk];
         if (v==='--') return '--';
-        const cls = v>0 ? 'cell-good' : (v<0 ? 'cell-bad' : '');
+        const cls = v>0 ? 'cell-bad' : (v<0 ? 'cell-good' : '');
         return '<span class="'+cls+'">'+(v>0?'↑':v<0?'↓':'')+Math.abs(v).toFixed(1)+'%</span>';
     }
 
@@ -1153,7 +1190,7 @@ function renderStore(data) {
         {key:'ord',label:'单量',type:'num'},
         {key:'rev',label:'实收',type:'num'},
         {key:'gross',label:'门店毛利',type:'num'},
-        {key:'comm',label:'平台抽佣',type:'num'},
+        {key:'comm',label:'公司抽佣',type:'num'},
         {key:'net',label:'抽佣毛利',type:'num'},
         {key:'margin',label:'毛利率',type:'pct'},
         {key:'aov',label:'实收客单',type:'num'},
@@ -1163,7 +1200,7 @@ function renderStore(data) {
     ], function(r,i){
         const marginCls=parseFloat(r.margin)<10?'cell-bad':'';
         const negCls=parseFloat(r.negPct)>35?'cell-bad':'';
-        return '<tr>'
+        return '<tr data-qn="'+r.qn+'">'
             +'<td>'+r.name+'</td>'
             +'<td>'+r.ord.toLocaleString()+'</td>'
             +'<td>'+fmtY(r.rev)+'</td>'
@@ -1212,7 +1249,7 @@ function renderChannel(data) {
     Plotly.newPlot('chartChannelComm',[{y:chComm.map(c=>c.channel),x:chComm.map(c=>c.commission_fee),
         type:'bar',orientation:'h',
         marker:{color:chComm.map(c=>chColors[c.channel]||'#FF9F43')}}],
-        {...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'平台抽佣(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
+        {...plotlyLayout,height:chartHS,xaxis:{...plotlyLayout.xaxis,title:'公司抽佣(元)'},margin:{l:80,r:20,t:10,b:40}},plotlyCfg);
 
     const chMarg=[...ch].sort((a,b)=>(b.commission_profit/(b.revenue||1))-(a.commission_profit/(a.revenue||1)));
     Plotly.newPlot('chartChannelMargin',[{y:chMarg.map(c=>c.channel),x:chMarg.map(c=>c.revenue>0?(c.commission_profit/c.revenue*100).toFixed(1):0),
@@ -1247,7 +1284,7 @@ function renderChannel(data) {
         {key:'pct',label:'占比(%)',type:'pct'},
         {key:'rev',label:'实收',type:'num'},
         {key:'gross',label:'门店毛利',type:'num'},
-        {key:'comm',label:'平台抽佣',type:'num'},
+        {key:'comm',label:'公司抽佣',type:'num'},
         {key:'net',label:'抽佣毛利',type:'num'},
         {key:'margin',label:'毛利率(%)',type:'pct'},
         {key:'negPct',label:'负毛利占比',type:'pct'}
@@ -1771,10 +1808,16 @@ function openModal(kpiType) {
     const maxV = Math.max(...vals, 1);
     const yPad = maxV * 0.25; // 顶部留25%空间给标签
 
-    // Build content — 降序表格
+    // 数值格式化 — 提前定义（表格和图表都需要）
+    let valFmtFn, vTF;
+    if (kpiType==='aov'||kpiType==='delivery') { valFmtFn = v=>'¥'+v.toFixed(2); vTF='.2f'; }
+    else if (kpiType==='neg'||kpiType==='margin') { valFmtFn = v=>v.toFixed(2)+'%'; vTF='.2f'; }
+    else { valFmtFn = v=>v.toLocaleString(undefined,{maximumFractionDigits:0}); vTF=',d'; }
+
+    // Build content — 升序表格（从小到大）
     const tableData = chartData.map(d=>({n:d.n, v:d.v})).sort((a,b)=>b.v-a.v);
     const tabMaxV = Math.max(...tableData.map(d=>d.v), 1);
-    let body = '<div class="modal-chart" id="modalChart"></div>';
+    let body = '';
     body += '<div class="table-scroll"><table><tr><th>门店</th><th>'+chartTitle+'</th>';
     if (kpiType==='order'||kpiType==='revenue'||kpiType==='store_profit'||kpiType==='comm_profit'||kpiType==='promo') {
         body += '<th>占比</th>';
@@ -1783,9 +1826,7 @@ function openModal(kpiType) {
     const totalV = vals.reduce((s,v)=>s+v, 0);
     tableData.forEach((d, i) => {
         const barW = Math.round(d.v / tabMaxV * 120);
-        const vDisplay = kpiType==='aov'||kpiType==='delivery' ? '¥'+d.v.toFixed(1) :
-                         kpiType==='neg' ? d.v.toFixed(1)+'%' :
-                         d.v.toLocaleString(undefined, {maximumFractionDigits: 0});
+        const vDisplay = valFmtFn(d.v);
         const pctStr = totalV > 0 ? ((d.v/totalV*100).toFixed(1)+'%') : '';
         const cls = kpiType==='neg' ? (d.v>30?'cell-bad':d.v>15?'cell-warn':'cell-good') : '';
         body += '<tr><td>'+d.n+'</td>';
@@ -1797,7 +1838,7 @@ function openModal(kpiType) {
     document.getElementById('modalBody').innerHTML = body;
     document.getElementById('kpiModal').classList.add('show');
 
-    // Render chart — Plotly原生降序，不要手动排序
+    // Render chart
     setTimeout(() => {
         Plotly.newPlot('modalChart', [{
             x: names, y: vals, type: 'bar',
@@ -1807,14 +1848,14 @@ function openModal(kpiType) {
                 if (kpiType==='promo') return '#E86452';
                 return color;
             })},
-            text: vals.map(v => kpiType==='aov'||kpiType==='delivery'?'¥'+v.toFixed(2):kpiType==='neg'||kpiType==='margin'?v.toFixed(2)+'%':v.toLocaleString(undefined,{maximumFractionDigits:0})),
+            text: vals.map(valFmtFn),
             textposition: 'outside',
             textfont: { size: 10, color: '#9ca3af' }
         }], {
             ...plotlyLayout,
             height: 310,
             xaxis: { ...plotlyLayout.xaxis, tickangle: -45, categoryorder: 'total ascending' },
-            yaxis: { ...plotlyLayout.yaxis, title: vLabel, gridcolor: '#e5e7eb', range: [0, maxV + yPad], automargin: true, tickformat: kpiType==='neg'||kpiType==='margin'?'.2f':kpiType==='aov'||kpiType==='delivery'?'.2f':',d' },
+            yaxis: { ...plotlyLayout.yaxis, title: vLabel, gridcolor: '#e5e7eb', automargin: true, tickformat: vTF, exponentformat: 'none' },
             margin: { l: 50, r: 20, t: 50, b: 80 }
         }, plotlyCfg);
     }, 50);

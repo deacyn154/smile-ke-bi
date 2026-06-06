@@ -197,33 +197,50 @@ def process_orders(order_paths, revenue_col='预计收入'):
                 if '时间' in c:
                     df = df.rename(columns={c: 'order_time'})
                     break
-        df = df[df['线上毛利率'] != '-'].copy()
+        # 分开处理：有效订单和无效订单(毛利率='-')
+        df['_invalid'] = df['线上毛利率'] == '-'
+        df_invalid = df[df['_invalid']].copy()
+        df = df[~df['_invalid']].copy()
+        # 提前解析日期（无效订单也需要）
+        df_invalid['order_date'] = pd.to_datetime(df_invalid['order_time']).dt.date
+        df_invalid['门店'] = df_invalid['门店'].astype(str)
+        
         df['order_date'] = pd.to_datetime(df['order_time']).dt.date
         df['门店'] = df['门店'].astype(str)
 
         name_to_id = mapping.drop_duplicates(subset='qn_store_name').set_index('qn_store_name')['qn_store_id'].to_dict()
 
-        # Delivery fee supplement from Meituan finance
+        # Delivery fee supplement from Meituan finance (SKIP for speed)
         mt_delivery = {}
-        for mf_fp in files['mt_finance']:
-            mf = pd.read_excel(mf_fp, header=1)
-            if '交易类型' not in mf.columns: continue
-            mf_del = mf[mf['交易类型'].isin(['配送费用', '配送小费'])].copy()
-            for _, r in mf_del.iterrows():
-                oid = str(r['订单号']).strip()
-                fee = abs(r['商家应收款（结算金额）'])
-                if fee > 0:
-                    mt_delivery[oid] = mt_delivery.get(oid, 0) + fee
+        # for mf_fp in files['mt_finance']:
+        #     mf = pd.read_excel(mf_fp, header=1)
+        #     if '交易类型' not in mf.columns: continue
+        #     mf_del = mf[mf['交易类型'].isin(['配送费用', '配送小费'])].copy()
+        #     for _, r in mf_del.iterrows():
+        #         oid = str(r['订单号']).strip()
+        #         fee = abs(r['商家应收款（结算金额）'])
+        #         if fee > 0:
+        #             mt_delivery[oid] = mt_delivery.get(oid, 0) + fee
 
-        if mt_delivery:
-            no_fee = df[(df['渠道名称']=='美团闪购') & (df['三方配送费']==0)]
-            supp = 0
-            for idx, row in no_fee.iterrows():
-                oid = str(row['订单号']).strip()
-                if oid in mt_delivery:
-                    df.at[idx, '三方配送费'] = mt_delivery[oid]
-                    supp += 1
-            print(f'  Delivery supplement: {supp}/{len(no_fee)} orders')
+        # (mt_delivery 已跳过，配送费只用牵牛花原始数据)
+        # if mt_delivery:
+        #     no_fee = df[(df['渠道名称']=='美团闪购') & (df['三方配送费']==0)]
+        #     supp = 0
+        #     for idx, row in no_fee.iterrows():
+        #         oid = str(row['订单号']).strip()
+        #         if oid in mt_delivery:
+        #             df.at[idx, '三方配送费'] = mt_delivery[oid]
+        #             supp += 1
+        #     if len(df_invalid) > 0:
+        #         inv_no_fee = df_invalid[(df_invalid['渠道名称']=='美团闪购') & (df_invalid['三方配送费']==0)]
+        #         supp2 = 0
+        #         for idx, row in inv_no_fee.iterrows():
+        #             oid = str(row['订单号']).strip()
+        #             if oid in mt_delivery:
+        #                 df_invalid.at[idx, '三方配送费'] = mt_delivery[oid]
+        #                 supp2 += 1
+        #         supp += supp2
+        #     print(f'  Delivery supplement: {supp}/{len(no_fee)+len(inv_no_fee) if len(df_invalid)>0 else len(no_fee)} orders')
 
         groups = df.groupby(['order_date','门店','渠道名称'])
 
@@ -237,6 +254,16 @@ def process_orders(order_paths, revenue_col='预计收入'):
         ).reset_index()
         daily.columns = ['日期','store_name','channel','order_cnt','revenue','gross_profit',
                          'income','cost','goods_cost','delivery_fee','commission','delivery_income']
+
+        # 无效订单：不计实收/单量/配送费，只统计毛利
+        if len(df_invalid) > 0:
+            inv_grp = df_invalid.groupby(['order_date','门店','渠道名称'])
+            inv_agg = inv_grp.agg(invalid_profit=('线上毛利','sum')).reset_index()
+            inv_agg.columns = ['日期','store_name','channel','invalid_profit']
+            daily = daily.merge(inv_agg, on=['日期','store_name','channel'], how='left')
+            daily['invalid_profit'] = daily['invalid_profit'].fillna(0)
+            daily['gross_profit'] = daily['gross_profit'] + daily['invalid_profit']
+            daily = daily.drop(columns=['invalid_profit'])
 
         # Neg profit
         neg = groups.apply(lambda g: (g['线上毛利']<0).sum()).reset_index()
@@ -292,7 +319,11 @@ if files['profit_analysis']:
             elif i == 4 and ('Unnamed' in c or 'ID' in str(c).upper() or str(c).isdigit()):
                 unnamed_map[c] = 'qn_store_id_raw'
         df = df.rename(columns=unnamed_map)
-        df = df[df['线上毛利率'] != '-'].copy()
+        # 分开有效/无效订单
+        df['_invalid'] = df['线上毛利率'] == '-'
+        df_invalid_cal = df[df['_invalid']].copy()
+        df = df[~df['_invalid']].copy()
+        
         df['订单号'] = df['订单号'].astype(str)
         df['order_date'] = pd.to_datetime(df['order_time']).dt.date
         df['门店'] = df['门店'].astype(str).apply(norm_name)
@@ -318,6 +349,21 @@ if files['profit_analysis']:
         ).reset_index()
         daily.columns = ['日期','store_name','qn_store_id','channel','order_cnt','revenue',
                          'gross_profit','income','cost','goods_cost','delivery_fee','commission','delivery_income']
+
+        # 无效订单：不计实收/单量/配送费，只统计毛利
+        if len(df_invalid_cal) > 0:
+            df_invalid_cal['order_date'] = pd.to_datetime(df_invalid_cal['order_time']).dt.date
+            df_invalid_cal['门店'] = df_invalid_cal['门店'].astype(str).apply(norm_name)
+            df_invalid_cal['qn_store_id_raw_num'] = pd.to_numeric(df_invalid_cal['qn_store_id_raw'], errors='coerce')
+            df_invalid_cal['qn_store_id'] = df_invalid_cal['qn_store_id_raw_num'].apply(lambda x: int(x) if not pd.isna(x) else None)
+            df_invalid_cal['门店'] = df_invalid_cal.apply(lambda r: cal_name_map.get(r['qn_store_id'], r['门店']), axis=1)
+            inv_grp = df_invalid_cal.groupby(['order_date','门店','qn_store_id','渠道名称'])
+            inv_agg = inv_grp.agg(invalid_profit=('线上毛利','sum')).reset_index()
+            inv_agg.columns = ['日期','store_name','qn_store_id','channel','invalid_profit']
+            daily = daily.merge(inv_agg, on=['日期','store_name','qn_store_id','channel'], how='left')
+            daily['invalid_profit'] = daily['invalid_profit'].fillna(0)
+            daily['gross_profit'] = daily['gross_profit'] + daily['invalid_profit']
+            daily = daily.drop(columns=['invalid_profit'])
 
         neg = df[df['线上毛利']<0].groupby(['order_date','门店','qn_store_id','渠道名称']).agg(
             neg_cnt=('订单号','count')).reset_index()
@@ -376,6 +422,10 @@ daily['real_profit'] = (daily['gross_profit'] - daily['promo_fee']).round(2)
 daily['real_margin_rate'] = np.where(daily['revenue']>0, (daily['real_profit']/daily['revenue']*100).round(2), 0)
 daily['commission_rate'] = daily['qn_store_id'].map(comm_lookup).fillna(0)
 daily['commission_fee'] = (daily['revenue'] * daily['commission_rate']).round(2)
+# 客无忧POS 不抽佣
+pos_mask = daily['channel'] == '客无忧POS'
+daily.loc[pos_mask, 'commission_rate'] = 0
+daily.loc[pos_mask, 'commission_fee'] = 0
 daily['commission_profit'] = (daily['real_profit'] - daily['commission_fee']).round(2)
 daily['commission_margin'] = np.where(daily['revenue']>0, (daily['commission_profit']/daily['revenue']*100).round(2), 0)
 
