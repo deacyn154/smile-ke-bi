@@ -9,7 +9,7 @@ BI ETL Pipeline v3
 """
 import pandas as pd
 import numpy as np
-import os, shutil
+import os, shutil, glob
 from datetime import date, datetime
 
 BASE = r'E:\Desktop\工作文件（月度）\claw制作BI'
@@ -101,9 +101,153 @@ for _, row in mapping.iterrows():
 print(f'Channel mapping: {len(mapping)} rows')
 
 # Commission rates
-df_comm = pd.read_excel(os.path.join(DATA, '门店抽佣点数明细表.xlsx'))
+df_comm = pd.read_excel(os.path.join(DATA, '基础信息表', '门店抽佣点数明细表.xlsx'))
 comm_lookup = {int(row['门店id']): row['抽佣点数'] for _, row in df_comm.iterrows()}
 print(f'Commission rates: {len(comm_lookup)} stores')
+
+# =============================================
+# 丰派线下渠道处理
+# =============================================
+def process_fengpai(fp_file, online_store_names, promo_path):
+    """处理丰派商品销售流水表，返回按门店+日期汇总的DataFrame"""
+    import re
+    df = pd.read_excel(fp_file)
+    if '交易类型' not in df.columns:
+        print(f'  [丰派] 跳过（无交易类型列）')
+        return None
+    
+    df = df[df['交易类型'] == '销售'].copy()
+    if len(df) == 0:
+        return None
+    # 只算订单来源=收银机的（线下POS流水）
+    if '订单来源' in df.columns:
+        before = len(df)
+        df = df[df['订单来源'] == '收银机'].copy()
+        print(f'  [丰派] 过滤收银机: {len(df)}/{before} 行')
+    
+    df['交易时间'] = pd.to_datetime(df['交易时间'], errors='coerce')
+    df = df.dropna(subset=['交易时间'])
+    months = df['交易时间'].dt.to_period('M').unique()
+    print(f'  [丰派] {len(df)} 行销售, 月份: {sorted(str(m) for m in months)}')
+    
+    # 加载最新可用的补货参考表（始终用最新月份的成本）
+    cost_map = {}
+    upc_to_cost = {}
+    # 扫描所有月份目录找补货参考表，取最新的
+    buo_found = None
+    for month_dir in sorted(os.listdir(DATA), reverse=True):
+        if not month_dir.isdigit() or len(month_dir) != 6: continue
+        buo_path = os.path.join(DATA, month_dir, f'补货参考_{month_dir}.xlsx')
+        if os.path.exists(buo_path):
+            buo_found = buo_path
+            break
+    if buo_found:
+        buo = pd.read_excel(buo_found, header=1)
+        buo_sku = buo.iloc[:,4].astype(str).str.strip()
+        buo_cost = pd.to_numeric(buo.iloc[:,7], errors='coerce').fillna(0)
+        buo_upc = buo.iloc[:,19].astype(str).str.strip()
+        for sku, c in zip(buo_sku, buo_cost):
+            sku = str(sku).strip()
+            if sku and sku != 'nan' and sku not in cost_map:
+                cost_map[sku] = float(c)
+        for upc_str, sku in zip(buo_upc, buo_sku):
+            sku = str(sku).strip()
+            if not sku or sku == 'nan': continue
+            upc_str = str(upc_str).strip()
+            if not upc_str or upc_str == 'nan': continue
+            if sku in cost_map:
+                for upc in [u.strip() for u in upc_str.split(',') if u.strip()]:
+                    if upc not in upc_to_cost:
+                        upc_to_cost[upc] = cost_map[sku]
+        print(f'  [丰派] 补货参考: {os.path.basename(buo_found)}, SKU→成本:{len(cost_map)}, UPC→成本:{len(upc_to_cost)}')
+    else:
+        print(f'  [丰派] 未找到任何补货参考表，全部用兜底')
+    
+    # 门店映射
+    SPECIAL_FP_MAP = {
+        'B019-微笑客(惠州中园一路店)': 'Q019-微笑客（博罗中园路店）',
+        'B019-微笑客（惠州中园一路店）': 'Q019-微笑客（博罗中园路店）',
+    }
+    code_to_full = {}
+    for s in online_store_names:
+        m = re.match(r'([A-Z]+\d+)\s*-\s*(.+)', s)
+        if m:
+            code_to_full[m.group(1).strip()] = s
+    
+    def match_fp(fp_name):
+        fp_name = str(fp_name).strip()
+        if fp_name in SPECIAL_FP_MAP:
+            return SPECIAL_FP_MAP[fp_name]
+        fp_cn = fp_name.replace('(','（').replace(')','）')
+        if fp_cn in SPECIAL_FP_MAP:
+            return SPECIAL_FP_MAP[fp_cn]
+        if fp_cn in online_store_names:
+            return fp_cn
+        m = re.match(r'([A-Z]+\d+)\s*-\s*(.+)', fp_name)
+        if m and m.group(1).strip() in code_to_full:
+            return code_to_full[m.group(1).strip()]
+        return None
+    
+    df['store_name'] = df['门店名称'].apply(match_fp)
+    before = len(df)
+    df = df[df['store_name'].notna()].copy()
+    print(f'  [丰派] 门店匹配: {len(df)}/{before} 行')
+    
+    # 商品成本匹配
+    sku_col = df['商品货号'].astype(str).str.strip()
+    upc_col = df['商品条码'].astype(str).str.strip()
+    retail_col = pd.to_numeric(df['零售价'], errors='coerce').fillna(0)
+    
+    cost1 = sku_col.map(cost_map)
+    m1 = cost1.notna()
+    cost2 = upc_col.map(upc_to_cost)
+    m2 = (~m1) & cost2.notna()
+    cost3 = (retail_col * 0.75).round(2)
+    m3 = (~m1) & (~m2)
+    
+    df['unit_cost'] = cost1.fillna(0)
+    df.loc[m2, 'unit_cost'] = cost2[m2]
+    df.loc[m3, 'unit_cost'] = cost3[m3]
+    print(f'  [丰派] 成本: SKU={m1.sum()}, UPC={m2.sum()}, 兜底={m3.sum()}')
+    
+    # 计算
+    df['qty'] = pd.to_numeric(df['商品数量'], errors='coerce').fillna(0)
+    df['revenue'] = pd.to_numeric(df['应收金额'], errors='coerce').fillna(0)
+    df['total_cost'] = df['unit_cost'] * df['qty']
+    df['gross_profit'] = df['revenue'] - df['total_cost']
+    df['日期'] = df['交易时间'].dt.date
+    
+    daily_fp = df.groupby(['日期','store_name']).agg(
+        order_cnt=('订单号','nunique'),
+        revenue=('revenue','sum'),
+        gross_profit=('gross_profit','sum'),
+        total_cost=('total_cost','sum'),
+        total_qty=('qty','sum'),
+    ).reset_index()
+    daily_fp['channel'] = '线下'
+    daily_fp['promo_fee'] = 0
+    daily_fp['commission_rate'] = 0
+    daily_fp['commission_fee'] = 0
+    daily_fp['commission_profit'] = daily_fp['gross_profit']
+    daily_fp['commission_margin'] = np.where(
+        daily_fp['revenue']>0, (daily_fp['gross_profit']/daily_fp['revenue']*100).round(2), 0)
+    daily_fp['delivery_fee'] = 0
+    daily_fp['delivery_order_cnt'] = 0
+    daily_fp['avg_delivery_cost'] = 0
+    daily_fp['neg_cnt'] = 0
+    daily_fp['neg_pct'] = 0
+    daily_fp['gross_margin_rate'] = np.where(
+        daily_fp['revenue']>0, (daily_fp['gross_profit']/daily_fp['revenue']*100).round(2), 0)
+    daily_fp['income'] = daily_fp['revenue']
+    daily_fp['cost'] = daily_fp['total_cost']
+    daily_fp['goods_cost'] = daily_fp['total_cost']
+    daily_fp['commission'] = 0
+    daily_fp['delivery_income'] = 0
+    daily_fp['real_margin_rate'] = daily_fp['gross_margin_rate']
+    daily_fp['qn_store_id'] = None  # 将在外面填充
+    daily_fp['日期'] = pd.to_datetime(daily_fp['日期'])
+    
+    return daily_fp
 
 # Store name normalization
 def norm_name(n):
@@ -414,6 +558,28 @@ if daily is None:
         exit(1)
 
 # =============================================
+# 3d. 丰派线下渠道
+# =============================================
+fp_files = glob.glob(os.path.join(DATA, '商品销售流水信息*.xlsx'))
+if fp_files:
+    online_names = set(daily[daily['channel'].isin(['美团闪购','饿了么','京东到家'])]['store_name'].unique())
+    all_fp = []
+    for fp_file in fp_files:
+        fp_daily = process_fengpai(fp_file, online_names, os.path.join(WAREHOUSE, 'promo_daily.xlsx'))
+        if fp_daily is not None:
+            all_fp.append(fp_daily)
+    if all_fp:
+        fp_daily = pd.concat(all_fp, ignore_index=True)
+        # 去重（同日同店取last）
+        fp_daily = fp_daily.drop_duplicates(subset=['日期','store_name'], keep='last')
+        # 补充qn_store_id
+        name_id = daily[['store_name','qn_store_id']].dropna(subset=['qn_store_id']).drop_duplicates()
+        name_id_dict = dict(zip(name_id['store_name'], name_id['qn_store_id']))
+        fp_daily['qn_store_id'] = fp_daily['store_name'].map(name_id_dict)
+        daily = pd.concat([daily, fp_daily], ignore_index=True)
+        print(f'[丰派] Added {len(fp_daily)} rows to daily from {len(fp_files)} files')
+
+# =============================================
 # 4. Join promotions, commission, margins
 # =============================================
 daily['promo_fee'] = daily.apply(
@@ -422,10 +588,12 @@ daily['real_profit'] = (daily['gross_profit'] - daily['promo_fee']).round(2)
 daily['real_margin_rate'] = np.where(daily['revenue']>0, (daily['real_profit']/daily['revenue']*100).round(2), 0)
 daily['commission_rate'] = daily['qn_store_id'].map(comm_lookup).fillna(0)
 daily['commission_fee'] = (daily['revenue'] * daily['commission_rate']).round(2)
-# 客无忧POS 不抽佣
-pos_mask = daily['channel'] == '客无忧POS'
-daily.loc[pos_mask, 'commission_rate'] = 0
-daily.loc[pos_mask, 'commission_fee'] = 0
+# 线下渠道（客无忧POS + 丰派）不抽佣
+offline_mask = daily['channel'].isin(['客无忧POS', '线下'])
+daily.loc[offline_mask, 'commission_rate'] = 0
+daily.loc[offline_mask, 'commission_fee'] = 0
+# 客无忧POS 改名为 线下
+daily.loc[daily['channel'] == '客无忧POS', 'channel'] = '线下'
 daily['commission_profit'] = (daily['real_profit'] - daily['commission_fee']).round(2)
 daily['commission_margin'] = np.where(daily['revenue']>0, (daily['commission_profit']/daily['revenue']*100).round(2), 0)
 

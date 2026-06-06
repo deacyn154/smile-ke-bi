@@ -46,14 +46,37 @@ def clean(records):
     return out
 
 data_records = clean(df.to_dict(orient='records'))
+# 精简字段，减少文件体积
+KEEP_FIELDS = {'store_name','日期','channel','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee'}
+data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
+
+# 合并门店：江门乐购一刻 / 恩平中澳豪庭 统一到江门店
+STORE_MERGE = {
+    'B020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
+    'D020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
+    'D020-乐购一刻（恩平中澳豪庭店）': '乐购一刻（江门店）',
+    'B085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
+    'D085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
+    'B061-微笑客（东莞惠众百货）': '东莞惠众百货',
+    'D061-微笑客（东莞惠众百货）': '东莞惠众百货',
+    'D061-惠众百货（东莞寮步店）': '东莞惠众百货',
+}
+for r in data_records:
+    sn = r.get('store_name', '')
+    if sn in STORE_MERGE:
+        r['store_name'] = STORE_MERGE[sn]
+for r in promo_records:
+    sn = r.get('store_name', '')
+    if sn in STORE_MERGE:
+        r['store_name'] = STORE_MERGE[sn]
 
 # --- Short store name extraction ---
 def short_name(full):
     m = re.search(r'[（(]([^）)]+)[）)]', full)
     return m.group(1) if m else full
 
-stores_full = sorted(df['store_name'].unique().tolist())
+stores_full = sorted(set(r['store_name'] for r in data_records))
 short_map = {}
 search_map = {}
 for s in stores_full:
@@ -61,6 +84,57 @@ for s in stores_full:
     short_map[s] = sn
     sid = s.split('-')[0] if '-' in s else ''
     search_map[s] = json.dumps([sn, sid, s], ensure_ascii=False)
+
+# 门店基本信息（省市映射）
+store_info_path = os.path.join(BASE, '数据表', '基础信息表', '门店基本信息.xlsx')
+store_region_map = {}
+if os.path.exists(store_info_path):
+    try:
+        info_df = pd.read_excel(store_info_path)
+        for _, row in info_df.iterrows():
+            name = str(row.get('门店名称', '')).strip()
+            region = str(row.get('所属地区', '')).strip()
+            if name and region:
+                store_region_map[name] = region
+        print(f'Store region map: {len(store_region_map)} stores loaded')
+    except Exception as e:
+        print(f'Store info load warning: {e}')
+store_region_json = json.dumps(store_region_map, ensure_ascii=False)
+
+# 门店运营成本
+cost_path = os.path.join(BASE, '数据表', '基础信息表', '门店运营成本.xlsx')
+store_cost_map = {}
+if os.path.exists(cost_path):
+    try:
+        cost_df = pd.read_excel(cost_path)
+        cost_list = []
+        for _, row in cost_df.iterrows():
+            sname = str(row.get('门店', '')).strip()
+            cost = float(row.get('门店运营成本', 0) or 0)
+            if sname and cost > 0:
+                cost_list.append({'name': sname, 'cost': cost})
+        # 精确匹配到完整门店名
+        for s in stores_full:
+            sn = short_name(s)
+            matched = None
+            # 先精确匹配省市区名（取门店名核心部分）
+            for c in cost_list:
+                # 检查cost名是否完整出现在store名中
+                if c['name'] in s: matched = c; break
+                if c['name'] in sn: matched = c; break
+            if not matched:
+                # 模糊匹配：至少4个连续汉字，避免短词误匹配
+                for c in cost_list:
+                    for i in range(len(c['name'])-3):
+                        frag = c['name'][i:i+4]
+                        if frag in s or frag in sn: matched = c; break
+                    if matched: break
+            if matched:
+                store_cost_map[s] = {'cost': matched['cost'], 'name': matched['name']}
+        print(f'Store cost map: {len(store_cost_map)} stores matched out of {len(cost_list)} costs')
+    except Exception as e:
+        print(f'Store cost load warning: {e}')
+store_cost_json = json.dumps(store_cost_map, ensure_ascii=False)
 
 channels = sorted(df['channel'].unique().tolist())
 dates_all = sorted(df['日期'].unique().tolist())
@@ -319,6 +393,17 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 .channel-badge.eleme { background:rgba(0,170,255,0.15); color:#00AAFF; }
 .channel-badge.jd { background:rgba(226,35,26,0.15); color:#E86452; }
 .channel-badge.pos { background:rgba(79,110,247,0.1); color:#4f6ef7; }
+/* === Profit Modal === */
+.profit-kpi-row { display:grid; grid-template-columns:repeat(5,1fr); gap:10px; margin-bottom:16px; }
+.profit-kpi { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:12px 14px; text-align:center; }
+.pk-label { font-size:12px; color:var(--text-dim); margin-bottom:4px; }
+.pk-value { font-size:22px; font-weight:700; color:#1f2937; }
+.pk-sub { font-size:11px; color:var(--text-dim); margin-top:3px; }
+#profitModal .table-scroll { max-height:60vh; overflow-y:auto; }
+#profitModal th { position:sticky; top:0; z-index:2; }
+.profit-grp td { font-weight:600 !important; }
+.profit-grp + tr + tr td { background:initial; }
+@media (max-width:768px) { .profit-kpi-row { grid-template-columns:repeat(2,1fr); } }
 /* === Skeleton Loading === */
 @keyframes shimmer { 0%{background-position:-200% 0;} 100%{background-position:200% 0;} }
 .skeleton { background:linear-gradient(90deg,var(--card) 25%,var(--card-hover) 50%,var(--card) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
@@ -335,7 +420,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 .kpi-card.clickable::after { content:'\\1F50D'; position:absolute; top:8px; right:10px; font-size:11px; opacity:0; transition:opacity .2s; }
 .kpi-card.clickable:hover::after { opacity:0.5; }
 /* === Modal === */
-.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9998; justify-content:center; align-items:center; padding:20px; }
+.modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9998; justify-content:center; align-items:flex-start; padding:20px; overflow-y:auto; }
 .modal-overlay.show { display:flex; }
 .modal-box { background:var(--card); border:1px solid var(--border); border-radius:16px; width:100%; max-width:820px; max-height:85vh; display:flex; flex-direction:column; animation:slideUp .25s ease; }
 @keyframes slideUp { from{opacity:0;transform:translateY(20px);} to{opacity:1;transform:translateY(0);} }
@@ -357,11 +442,24 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
         <div class="modal-body" id="modalBody"></div>
     </div>
 </div>
+<div class="modal-overlay" id="profitModal">
+    <div class="modal-box" style="max-width:1100px;">
+        <div class="modal-header">
+            <h2 id="profitModalTitle">门店盈利分析</h2>
+            <button class="modal-close" onclick="closeProfitModal()">✕</button>
+        </div>
+        <div id="profitModalBody"></div>
+    </div>
+</div>
 <div class="dashboard" id="dashboard">
     <div class="header">
         <h1>微笑客经营看板</h1>
-        <div class="update-time" id="updateTime"></div>
-        <div class="update-time" id="dateRangeLabel" style="font-size:13px;color:var(--accent)"></div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <button class="export-btn" onclick="openProfitModal()" style="font-size:13px;padding:6px 16px;">💰 门店盈利分析</button>
+            <button class="export-btn" onclick="exportExcel()">📥 导出</button>
+            <span class="update-time" id="updateTime"></span>
+            <span class="update-time" id="dateRangeLabel" style="font-size:13px;color:var(--accent)"></span>
+        </div>
     </div>
     <div class="page-nav" style="display:flex;gap:0;margin-bottom:16px;">
         <button class="page-btn active" onclick="switchPage('ops',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px 0 0 8px;cursor:pointer;font-size:14px;">运营数据</button>
@@ -374,8 +472,8 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
             <span class="filter-label">📅</span>
             <div class="date-quick" id="dateQuick">
                 <button class="date-btn" onclick="setDateRange('yesterday')">昨天</button>
-                <button class="date-btn" onclick="setDateRange('thisWeek')">本周</button>
-                <button class="date-btn" onclick="setDateRange('thisMonth')">本月</button>
+                <button class="date-btn" onclick="setDateRange('last7')">近7天</button>
+                <button class="date-btn" onclick="setDateRange('last30')">近30天</button>
                 <button class="date-btn" onclick="setDateRange('lastMonth')">上月</button>
                 <button class="date-btn active" onclick="toggleCalendar()">自定义</button>
             </div>
@@ -394,7 +492,8 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
         <div class="filter-row">
             <span class="filter-label">🏪</span>
             <div style="flex:1;">
-                <input class="store-search" id="storeSearch" placeholder="搜索门店（编号/名称）" oninput="filterStores()">
+                <input class="store-search" id="storeSearch" placeholder="搜索门店 / 批量粘贴ID(空格逗号换行分隔)" oninput="filterStores()">
+                <div style="display:none;margin-top:2px;font-size:11px;color:var(--accent);" id="batchSelected"></div>
                 <div class="chip-group" id="storeChips"></div>
             </div>
             <div class="chip-actions">
@@ -561,6 +660,8 @@ const allChannels = ''' + channels_json + ''';
 const allDates = ''' + dates_json + ''';
 const shortNames = ''' + short_map_json + ''';
 const searchKeys = ''' + search_map_json + ''';
+const storeRegionMap = ''' + store_region_json + ''';  // 门店→所属地区
+const storeCostMap = ''' + store_cost_json + ''';  // 门店→{cost, qnid}
 
 // 门店名 → 牵牛花门店ID 映射（导出Excel时用）
 const storeQnMap = {};
@@ -569,6 +670,38 @@ rawData.forEach(r => {
         storeQnMap[r.store_name] = String(r.qn_store_id);
     }
 });
+
+// 门店→省市 映射 + 按省市排序
+const storeProvince = {};
+(function() {
+    // 从所属地区提取省份（格式：广东省深圳市龙华区 → 广东省）
+    function extractProvince(region) {
+        if (!region) return '其他';
+        // 直辖市
+        if (region.startsWith('北京')) return '北京';
+        if (region.startsWith('上海')) return '上海';
+        if (region.startsWith('天津')) return '天津';
+        if (region.startsWith('重庆')) return '重庆';
+        // 自治区
+        if (region.includes('自治区')) return region.split('自治区')[0] + '自治区';
+        // 普通省份
+        if (region.includes('省')) return region.split('省')[0];
+        return region.substring(0, 2);
+    }
+    for (let s of allStoresFull) {
+        let region = storeRegionMap[s] || '';
+        storeProvince[s] = extractProvince(region);
+    }
+    // 按省市排序
+    const provOrder = ['广东省','湖南省','广西壮族自治区','福建省','江西省','海南省','湖北省'];
+    allStoresFull.sort((a,b) => {
+        let pa = provOrder.indexOf(storeProvince[a]), pb = provOrder.indexOf(storeProvince[b]);
+        if (pa>=0 && pb<0) return -1;
+        if (pa<0 && pb>=0) return 1;
+        if (pa>=0 && pb>=0 && pa!==pb) return pa-pb;
+        return a.localeCompare(b);
+    });
+})();
 
 const isMobile = window.innerWidth < 768;
 const chartH = isMobile ? 260 : 380;
@@ -615,13 +748,11 @@ function setDateRange(mode) {
         case 'yesterday':
             from = yesterday(); to = from;
             break;
-        case 'thisWeek':
-            let [mon,sun] = calcWeekBounds(new Date());
-            from = dFmt(mon); to = dFmt(sun);
+        case 'last7':
+            to = yesterday(); from = dFmt(new Date(Date.now()-7*86400000));
             break;
-        case 'thisMonth':
-            let [m1,m2] = calcMonthBounds(new Date());
-            from = dFmt(m1); to = dFmt(m2);
+        case 'last30':
+            to = yesterday(); from = dFmt(new Date(Date.now()-30*86400000));
             break;
         case 'lastMonth':
             let d2 = new Date(); d2.setMonth(d2.getMonth()-1);
@@ -729,13 +860,33 @@ function updateCalRange() {
 
 // ============ STORE SEARCH ============
 function filterStores() {
-    let q = document.getElementById('storeSearch').value.trim().toLowerCase();
-    document.querySelectorAll('#storeChips .chip').forEach(c => {
-        let full = c.getAttribute('data-full');
-        let keys = JSON.parse(searchKeys[full] || '[]');
-        let match = q==='' || keys.some(k => k.toLowerCase().includes(q));
-        c.classList.toggle('hidden', !match);
+    let q = document.getElementById("storeSearch").value.trim();
+    if (!q) {
+        document.querySelectorAll("#storeChips .chip").forEach(c => c.classList.remove("hidden"));
+        document.getElementById("batchSelected").style.display = "none";
+        return;
+    }
+    // Detect batch paste (has spaces or commas)
+    var hasDelim = q.includes(" ") || q.includes(",");
+    var ids = hasDelim ? q.split(/[ ,]+/).filter(Boolean) : [q];
+    var matched = [];
+    document.querySelectorAll("#storeChips .chip").forEach(c => {
+        var full = c.getAttribute("data-full");
+        var keys = JSON.parse(searchKeys[full] || "[]");
+        var m = ids.some(function(id) { return keys.some(function(k) { return k.toLowerCase().includes(id.toLowerCase()); }); });
+        if (m) matched.push(full);
+        else if (hasDelim) c.classList.add("hidden");
+        else c.classList.toggle("hidden", !m);
     });
+    if (hasDelim && matched.length > 0) {
+        selectedStores.splice(0, selectedStores.length, ...matched);
+        refreshChips(); refresh();
+        document.getElementById("storeSearch").value = "";
+        document.getElementById("batchSelected").textContent = "已选中 " + matched.length + " 家门店";
+        document.getElementById("batchSelected").style.display = "block";
+    } else if (!hasDelim) {
+        document.getElementById("batchSelected").style.display = "none";
+    }
 }
 
 // ============ FILTER STATE ============
@@ -882,18 +1033,18 @@ function renderSummary(data, prev) {
     const parts=[];
     // 1. Overall
     parts.push('本期共 <span class="highlight-blue">'+ord.toLocaleString()+'</span> 单，实收 <span class="highlight-blue">'+fmtY(rev)+
-        '</span>，抽佣毛利 <span class="highlight-green">'+fmtY(cp)+'</span>（毛利率 '+margin+'%）。');
+        '</span>，抽佣毛利 <span class="highlight-blue">'+fmtY(cp)+'</span>（毛利率 '+margin+'%）。');
     // 2. Change
     const chgDir=parseFloat(ordChg)>0?'增长':'下降';
-    parts.push('环比'+chgDir+' <span class="'+(parseFloat(ordChg)>0?'highlight-green':'highlight-red')+'">'+Math.abs(ordChg)+'%</span>。');
+    parts.push('环比'+chgDir+' <span class="'+(parseFloat(ordChg)>0?'highlight-red':'highlight-green')+'">'+Math.abs(ordChg)+'%</span>。');
     // 3. Top channel
     if(topCh) parts.push('最大渠道 <span class="highlight-blue">'+topCh.n+'</span>（'+topCh.ord.toLocaleString()+'单）。');
     // 4. Top stores
-    parts.push('毛利贡献前三：<span class="highlight-green">'+top3+'</span>。');
+    parts.push('毛利贡献前三：<span class="highlight-red">'+top3+'</span>。');
     // 5. Warnings
-    if(botText) parts.push('毛利亏损：<span class="highlight-red">'+botText+'</span>。');
-    if(negText) parts.push('高负毛利门店（>30%）：<span class="highlight-red">'+negText+'</span>。');
-    if(parseFloat(negPct)>25) parts.push('整体负毛利占比 <span class="highlight-red">'+negPct+'%</span>，需重点关注。');
+    if(botText) parts.push('毛利亏损：<span class="highlight-green">'+botText+'</span>。');
+    if(negText) parts.push('高负毛利门店（>30%）：<span class="highlight-green">'+negText+'</span>。');
+    if(parseFloat(negPct)>25) parts.push('整体负毛利占比 <span class="highlight-green">'+negPct+'%</span>，需重点关注。');
     // 6. Promotion
     if(pf>0) parts.push('推广费合计 <span class="highlight-yellow">¥'+pf.toFixed(0)+'</span>。');
 
@@ -1125,7 +1276,7 @@ function renderStore(data) {
     const prevStoreMap = {};
     prevStoreData.forEach(r => {
         const sn = r.store_name || '';
-        if (!prevStoreMap[sn]) prevStoreMap[sn] = {ord:0, rev:0, rp:0, cf:0, cp:0, neg:0, doc:0, df:0};
+        if (!prevStoreMap[sn]) prevStoreMap[sn] = {ord:0, rev:0, rp:0, cf:0, cp:0, neg:0, doc:0, df:0, promo:0};
         prevStoreMap[sn].ord += r.order_cnt||0;
         prevStoreMap[sn].rev += r.revenue||0;
         prevStoreMap[sn].rp += r.real_profit||0;
@@ -1134,6 +1285,7 @@ function renderStore(data) {
         prevStoreMap[sn].neg += r.neg_cnt||0;
         prevStoreMap[sn].doc += r.delivery_order_cnt||0;
         prevStoreMap[sn].df += r.delivery_fee||0;
+        prevStoreMap[sn].promo += r.promo_fee||0;
     });
 
     function momPct(cur, prev) {
@@ -1142,29 +1294,45 @@ function renderStore(data) {
     }
 
     // Compute derived values for table — all metrics with MoM
+    // 按省市排序
+    stores.sort((a,b) => {
+        let pa = storeProvince[a.store_name] || '其他', pb = storeProvince[b.store_name] || '其他';
+        if (pa !== pb) {
+            const po = ['广东省','湖南省','广西壮族自治区','福建省','江西省','海南省','湖北省','其他'];
+            return po.indexOf(pa) - po.indexOf(pb);
+        }
+        return (a.store_name||'').localeCompare(b.store_name||'');
+    });
+
     const rows=stores.map(s=>{
         const rev=s.revenue||0, rp=s.real_profit||0, cf=s.commission_fee||0, cp=s.commission_profit||0;
         const ord=s.order_cnt||0, aov=ord>0?(rev/ord):0;
         const delCost=(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt):0;
         const margin=rev>0?(cp/rev*100):0;
         const negPct=ord>0?((s.neg_cnt||0)/ord*100):0;
-        const p = prevStoreMap[s.store_name] || {ord:0, rev:0, rp:0, cf:0, cp:0, neg:0, doc:0, df:0};
+        const promo=s.promo_fee||0;
+        const avgProfit=ord>0?(cp/ord):0;  // 单均毛利
+        const p = prevStoreMap[s.store_name] || {ord:0, rev:0, rp:0, cf:0, cp:0, neg:0, doc:0, df:0, promo:0};
         const pAov = p.ord>0?(p.rev/p.ord):0;
         const pDelCost = p.doc>0?(p.df/p.doc):0;
         const pMargin = p.rev>0?(p.cp/p.rev*100):0;
         const pNegPct = p.ord>0?((p.neg||0)/p.ord*100):0;
         return {
             name:short(s.store_name),
+            full: s.store_name,
             qn: storeQnMap[s.store_name] || '',
+            prov: storeProvince[s.store_name] || '其他',
             ord, rev, gross:rp, comm:cf, net:cp,
+            promo, avgProfit,
             margin, aov, delCost, negPct,
-            // All MoM values
             mom: {
                 ord: momPct(ord, p.ord),
                 rev: momPct(rev, p.rev),
                 gross: momPct(rp, p.rp),
                 comm: momPct(cf, p.cf),
                 net: momPct(cp, p.cp),
+                promo: momPct(promo, p.promo||0),
+                avgProfit: momPct(avgProfit, p.ord>0?(p.cp/p.ord):0),
                 margin: momPct(margin, pMargin),
                 aov: momPct(aov, pAov),
                 delCost: momPct(delCost, pDelCost),
@@ -1173,8 +1341,8 @@ function renderStore(data) {
         };
     });
 
-    // Map column index → mom key
-    const momKeyMap = {1:'ord',2:'rev',3:'gross',4:'comm',5:'net',6:'margin',7:'aov',8:'delCost',9:'negPct'};
+    // Map column index → mom key (更新为新的列顺序)
+    const momKeyMap = {1:'ord',2:'rev',3:'gross',4:'promo',5:'net',6:'avgProfit',7:'comm',8:'margin',9:'aov',10:'delCost',11:'negPct'};
 
     function getMomDisplay(r) {
         const state = tableSortState['storeTable'] || {col:-1};
@@ -1185,28 +1353,40 @@ function renderStore(data) {
         return '<span class="'+cls+'">'+(v>0?'↑':v<0?'↓':'')+Math.abs(v).toFixed(1)+'%</span>';
     }
 
-    makeSortable('storeTable', rows, [
-        {key:'name',label:'门店',type:'str'},
-        {key:'ord',label:'单量',type:'num'},
-        {key:'rev',label:'实收',type:'num'},
-        {key:'gross',label:'门店毛利',type:'num'},
-        {key:'comm',label:'公司抽佣',type:'num'},
-        {key:'net',label:'抽佣毛利',type:'num'},
-        {key:'margin',label:'毛利率',type:'pct'},
-        {key:'aov',label:'实收客单',type:'num'},
-        {key:'delCost',label:'配送成本',type:'num'},
-        {key:'negPct',label:'负毛利',type:'pct'},
-        {key:'mom_net',label:'环比',type:'pct'}
-    ], function(r,i){
-        const marginCls=parseFloat(r.margin)<10?'cell-bad':'';
-        const negCls=parseFloat(r.negPct)>35?'cell-bad':'';
-        return '<tr data-qn="'+r.qn+'">'
+    // Build table with province grouping
+    let h = '<table><tr>';
+    const colDefs = [
+        {label:'序号'}, {label:'门店名称'}, {label:'订单量'}, {label:'实收'}, {label:'门店毛利'},
+        {label:'推广金额'}, {label:'抽佣毛利'}, {label:'单均毛利'}, {label:'公司抽佣'},
+        {label:'抽佣毛利率'}, {label:'实收客单价'}, {label:'平均配送成本'}, {label:'负毛利占比'}, {label:'环比'}
+    ];
+    colDefs.forEach((c,i) => {
+        h += '<th>' + c.label + '</th>';
+    });
+    h += '</tr>';
+
+    // Province grouping
+    let lastProv = '', idx = 0;
+    const provShort = {'广东省':'广东','湖南省':'湖南','广西壮族自治区':'广西','福建省':'福建','江西省':'江西','海南省':'海南','湖北省':'湖北'};
+    rows.forEach(r => {
+        if (r.prov !== lastProv) {
+            lastProv = r.prov;
+            idx = 0;
+            h += '<tr style="background:rgba(79,110,247,0.05);"><td colspan="'+colDefs.length+'" style="font-weight:600;padding:8px 10px;color:var(--accent);">■ '+(provShort[r.prov]||r.prov)+'</td></tr>';
+        }
+        idx++;
+        const marginCls = parseFloat(r.margin)<10?'cell-bad':'';
+        const negCls = parseFloat(r.negPct)>35?'cell-bad':'';
+        h += '<tr>'
+            +'<td>'+idx+'</td>'
             +'<td>'+r.name+'</td>'
             +'<td>'+r.ord.toLocaleString()+'</td>'
             +'<td>'+fmtY(r.rev)+'</td>'
             +'<td>'+fmtY(r.gross)+'</td>'
-            +'<td>'+fmtY(r.comm)+'</td>'
+            +'<td>'+fmtY(r.promo)+'</td>'
             +'<td>'+fmtY(r.net)+'</td>'
+            +'<td>¥'+r.avgProfit.toFixed(2)+'</td>'
+            +'<td>'+fmtY(r.comm)+'</td>'
             +'<td class="'+marginCls+'">'+r.margin.toFixed(1)+'%</td>'
             +'<td>¥'+r.aov.toFixed(1)+'</td>'
             +'<td>¥'+r.delCost.toFixed(1)+'</td>'
@@ -1214,6 +1394,8 @@ function renderStore(data) {
             +'<td>'+getMomDisplay(r)+'</td>'
             +'</tr>';
     });
+    h += '</table>';
+    document.getElementById('storeTable').innerHTML = h;
 }
 
 function negBadge(np) {
@@ -1229,8 +1411,8 @@ function renderChannel(data) {
     ch.forEach(c=>{c.pct=to>0?(c.order_cnt/to*100).toFixed(1):'0.0';});
 
     // Channel color map
-    const chColors={'美团闪购':'#FFD100','饿了么':'#00AAFF','京东到家':'#E86452','客无忧POS':'#5B8FF9'};
-    const chOrder=['美团闪购','饿了么','京东到家','客无忧POS'];
+    const chColors={'美团闪购':'#FFD100','饿了么':'#00AAFF','京东到家':'#E86452','线下':'#5B8FF9'};
+    const chOrder=['美团闪购','饿了么','京东到家','线下'];
     const chSorted=[...ch].sort((a,b)=>chOrder.indexOf(a.channel)-chOrder.indexOf(b.channel));
 
     Plotly.newPlot('chartChannelPie',[{values:chSorted.map(c=>c.order_cnt),labels:chSorted.map(c=>c.channel),
@@ -1259,7 +1441,7 @@ function renderChannel(data) {
 
     // Channel badge helper
     function chBadge(name) {
-        const cls={'美团闪购':'meituan','饿了么':'eleme','京东到家':'jd','客无忧POS':'pos'}[name]||'pos';
+        const cls={'美团闪购':'meituan','饿了么':'eleme','京东到家':'jd','线下':'pos'}[name]||'pos';
         return '<span class="channel-badge '+cls+'">'+name+'</span>';
     }
 
@@ -1880,6 +2062,135 @@ document.getElementById('kpiGrid').addEventListener('click', function(e) {
         const kpiType = card.getAttribute('data-kpi');
         if (kpiType) openModal(kpiType);
     }
+});
+
+// ============ PROFIT ANALYSIS MODAL ============
+function openProfitModal() {
+    var data = rawData.filter(function(r) { return r['日期'] >= dateFrom && r['日期'] <= dateTo; });
+    var stores = groupBy(data, ['store_name']);
+    
+    var endDate = dateTo || allDates[allDates.length-1];
+    var startDate = dateFrom || allDates[0];
+    var daysInRange = Math.ceil((dParse(endDate) - dParse(startDate)) / 86400000) + 1;
+    var DAYS_PER_MONTH = 30;
+    var costMul = daysInRange >= 28 ? 1 : daysInRange / DAYS_PER_MONTH;
+    
+    var totalProfit = 0, totalCost = 0, totalStoreProfit = 0;
+    var profitCount = 0, lossCount = 0;
+    var rows = [];
+    
+    stores.forEach(function(s) {
+        var cp = s.commission_profit || 0;
+        var shortName = short(s.store_name);
+        var costInfo = storeCostMap[s.store_name] || storeCostMap[shortName];
+        if (!costInfo) {
+            var keys = Object.keys(storeCostMap);
+            for (var i = 0; i < keys.length; i++) {
+                var k = keys[i];
+                if (shortName.indexOf(k) >= 0 || k.indexOf(shortName) >= 0) { costInfo = storeCostMap[k]; break; }
+            }
+        }
+        var monthlyCost = costInfo ? costInfo.cost : 0;
+        var storeCost = monthlyCost * costMul;
+        var profit = cp - storeCost;
+        var isProfitable = profit > 0;
+        
+        if (isProfitable) profitCount++; else lossCount++;
+        totalProfit += profit;
+        totalCost += storeCost;
+        totalStoreProfit += cp;
+        
+        rows.push({
+            name: shortName, cp: cp, cost: storeCost, profit: profit,
+            isProfitable: isProfitable,
+            hasCost: monthlyCost > 0,
+            margin: s.revenue > 0 ? (cp / s.revenue * 100) : 0,
+            rev: s.revenue || 0, ord: s.order_cnt || 0
+        });
+    });
+    
+    // Sort: profitable → loss → no-cost (bottom)
+    rows.sort(function(a,b) {
+        if (a.hasCost && !b.hasCost) return -1;
+        if (!a.hasCost && b.hasCost) return 1;
+        if (!a.hasCost && !b.hasCost) return a.name.localeCompare(b.name);
+        // Both have cost: profitable first
+        if (a.isProfitable && !b.isProfitable) return -1;
+        if (!a.isProfitable && b.isProfitable) return 1;
+        if (a.isProfitable) return b.profit - a.profit;
+        return a.profit - b.profit;
+    });
+    
+    var profitRate = rows.length > 0 ? (profitCount / rows.length * 100).toFixed(1) : 0;
+    var avgProfitPerStore = rows.length > 0 ? (totalProfit / rows.length) : 0;
+    
+    // Build HTML
+    var h = [];
+    
+    // KPI cards
+    h.push('<div class="profit-kpi-row">');
+    h.push('<div class="profit-kpi"><div class="pk-label">总盈利</div><div class="pk-value" style="color:' + (totalProfit>=0?'#dc2626':'#16a34a') + '">' + fmtY(totalProfit) + '</div></div>');
+    h.push('<div class="profit-kpi"><div class="pk-label">盈利 / 亏损</div><div class="pk-value"><span style="color:#dc2626">' + profitCount + '</span> / <span style="color:#16a34a">' + lossCount + '</span></div></div>');
+    h.push('<div class="profit-kpi"><div class="pk-label">盈利占比</div><div class="pk-value">' + profitRate + '%</div></div>');
+    h.push('<div class="profit-kpi"><div class="pk-label">日均盈利</div><div class="pk-value">' + fmtY(avgProfitPerStore / Math.max(1,daysInRange)) + '</div></div>');
+    h.push('<div class="profit-kpi"><div class="pk-label">计算周期</div><div class="pk-value" style="font-size:20px;">' + daysInRange + ' 天</div><div class="pk-sub">成本系数 ' + costMul.toFixed(2) + '</div></div>');
+    h.push('</div>');
+    
+    // Table
+    h.push('<div class="table-scroll">');
+    h.push('<table>');
+    h.push('<thead><tr><th>序号</th><th>门店</th><th>订单量</th><th>抽佣毛利</th><th>店铺成本</th><th>净利润</th><th>利润率</th><th>客单价</th></tr></thead>');
+    h.push('<tbody>');
+    
+    var inGroup = null;
+    for (var i = 0; i < rows.length; i++) {
+        var r = rows[i];
+        var curGroup = r.hasCost ? (r.isProfitable ? 'profit' : 'loss') : 'nocost';
+        if (curGroup !== inGroup) {
+            inGroup = curGroup;
+            var grpStyle, grpLabel;
+            if (curGroup === 'profit') { grpStyle = 'background:#fef2f2;color:#dc2626;'; grpLabel = '盈利门店'; }
+            else if (curGroup === 'loss') { grpStyle = 'background:#ecfdf5;color:#16a34a;'; grpLabel = '亏损门店'; }
+            else { grpStyle = 'background:#f9fafb;color:#6b7280;'; grpLabel = '暂无成本数据'; }
+            h.push('<tr class="profit-grp"><td colspan="8" style="' + grpStyle + 'font-weight:600;padding:8px 10px;">' + grpLabel + '</td></tr>');
+        }
+        var aov = r.ord > 0 ? (r.rev / r.ord) : 0;
+        var pc = r.hasCost ? (r.isProfitable ? 'cell-bad' : 'cell-good') : '';
+        h.push('<tr>'
+            + '<td>' + (i+1) + '</td>'
+            + '<td>' + r.name + '</td>'
+            + '<td>' + r.ord.toLocaleString() + '</td>'
+            + '<td>' + fmtY(r.cp) + '</td>'
+            + '<td>' + (r.hasCost ? fmtY(r.cost) : '—') + '</td>'
+            + '<td class="' + pc + '">' + (r.hasCost ? fmtY(r.profit) : '—') + '</td>'
+            + '<td>' + r.margin.toFixed(1) + '%</td>'
+            + '<td>' + fmtY(aov) + '</td>'
+            + '</tr>');
+    }
+    
+    // Summary
+    var sc = totalProfit >= 0 ? 'cell-good' : 'cell-bad';
+    h.push('<tr class="profit-sum" style="font-weight:600;background:#f9fafb;">'
+        + '<td colspan="2">合计</td>'
+        + '<td></td>'
+        + '<td>' + fmtY(totalStoreProfit) + '</td>'
+        + '<td>' + fmtY(totalCost) + '</td>'
+        + '<td class="' + sc + '">' + fmtY(totalProfit) + '</td>'
+        + '<td colspan="2"></td>'
+        + '</tr>');
+    
+    h.push('</tbody></table></div>');
+    
+    document.getElementById('profitModalBody').innerHTML = h.join('');
+    document.getElementById('profitModal').classList.add('show');
+}
+
+function closeProfitModal() {
+    document.getElementById('profitModal').classList.remove('show');
+}
+
+document.addEventListener('click', function(e) {
+    if (e.target.id === 'profitModal') closeProfitModal();
 });
 
 // ============ INIT ============
