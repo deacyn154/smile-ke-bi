@@ -1342,7 +1342,7 @@ function renderStore(data) {
     });
 
     // Map column index → mom key (更新为新的列顺序)
-    const momKeyMap = {1:'ord',2:'rev',3:'gross',4:'promo',5:'net',6:'avgProfit',7:'comm',8:'margin',9:'aov',10:'delCost',11:'negPct'};
+    const momKeyMap = {2:'ord',3:'rev',4:'gross',5:'promo',6:'net',7:'avgProfit',8:'comm',9:'margin',10:'aov',11:'delCost',12:'negPct'};
 
     function getMomDisplay(r) {
         const state = tableSortState['storeTable'] || {col:-1};
@@ -1353,32 +1353,26 @@ function renderStore(data) {
         return '<span class="'+cls+'">'+(v>0?'↑':v<0?'↓':'')+Math.abs(v).toFixed(1)+'%</span>';
     }
 
-    // Build table with province grouping
-    let h = '<table><tr>';
-    const colDefs = [
-        {label:'序号'}, {label:'门店名称'}, {label:'订单量'}, {label:'实收'}, {label:'门店毛利'},
-        {label:'推广金额'}, {label:'抽佣毛利'}, {label:'单均毛利'}, {label:'公司抽佣'},
-        {label:'抽佣毛利率'}, {label:'实收客单价'}, {label:'平均配送成本'}, {label:'负毛利占比'}, {label:'环比'}
-    ];
-    colDefs.forEach((c,i) => {
-        h += '<th>' + c.label + '</th>';
-    });
-    h += '</tr>';
-
-    // Province grouping
-    let lastProv = '', idx = 0;
-    const provShort = {'广东省':'广东','湖南省':'湖南','广西壮族自治区':'广西','福建省':'福建','江西省':'江西','海南省':'海南','湖北省':'湖北'};
-    rows.forEach(r => {
-        if (r.prov !== lastProv) {
-            lastProv = r.prov;
-            idx = 0;
-            h += '<tr style="background:rgba(79,110,247,0.05);"><td colspan="'+colDefs.length+'" style="font-weight:600;padding:8px 10px;color:var(--accent);">■ '+(provShort[r.prov]||r.prov)+'</td></tr>';
-        }
-        idx++;
-        const marginCls = parseFloat(r.margin)<10?'cell-bad':'';
-        const negCls = parseFloat(r.negPct)>35?'cell-bad':'';
-        h += '<tr>'
-            +'<td>'+idx+'</td>'
+    makeSortable('storeTable', rows, [
+        {key:'idx',label:'序号',type:'num',sortable:false},
+        {key:'name',label:'门店名称',type:'str'},
+        {key:'ord',label:'订单量',type:'num'},
+        {key:'rev',label:'实收',type:'num'},
+        {key:'gross',label:'门店毛利',type:'num'},
+        {key:'promo',label:'推广金额',type:'num'},
+        {key:'net',label:'抽佣毛利',type:'num'},
+        {key:'avgProfit',label:'单均毛利',type:'num'},
+        {key:'comm',label:'公司抽佣',type:'num'},
+        {key:'margin',label:'抽佣毛利率',type:'pct'},
+        {key:'aov',label:'实收客单价',type:'num'},
+        {key:'delCost',label:'平均配送成本',type:'num'},
+        {key:'negPct',label:'负毛利占比',type:'pct'},
+        {key:'mom_net',label:'环比',type:'pct'}
+    ], function(r,i){
+        var marginCls = parseFloat(r.margin)<10?'cell-bad':'';
+        var negCls = parseFloat(r.negPct)>35?'cell-bad':'';
+        return '<tr data-qn="'+r.qn+'">'
+            +'<td>'+(i+1)+'</td>'
             +'<td>'+r.name+'</td>'
             +'<td>'+r.ord.toLocaleString()+'</td>'
             +'<td>'+fmtY(r.rev)+'</td>'
@@ -1394,8 +1388,6 @@ function renderStore(data) {
             +'<td>'+getMomDisplay(r)+'</td>'
             +'</tr>';
     });
-    h += '</table>';
-    document.getElementById('storeTable').innerHTML = h;
 }
 
 function negBadge(np) {
