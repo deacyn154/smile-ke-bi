@@ -52,6 +52,8 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Mi
 .cal-grid .cal-day.range-end { background:var(--accent); color:#fff; border-radius:0 6px 6px 0; }
 .cal-grid .cal-day.range-start.range-end { border-radius:6px; }
 .cal-grid .cal-day.other-month { color:rgba(139,143,163,0.3); }
+.cal-grid .cal-day.has-data { color:#1f2937; }
+.cal-grid .cal-day.no-data { color:rgba(139,143,163,0.2); cursor:default; pointer-events:none; }
 .cal-toggle { color:var(--accent); font-size:12px; cursor:pointer; padding:3px 8px; border-radius:10px; border:1px solid var(--border); background:transparent; touch-action:manipulation; }
 .cal-toggle:hover { background:rgba(79,110,247,0.08); }
 /* Store search */
@@ -605,7 +607,8 @@ function renderCalendar() {
     for (let d=1; d<=daysInMonth; d++) {
         let dt = new Date(y,m,d);
         let ds = dFmt(dt);
-        let cls = 'cal-day';
+        let hasData = allDates.indexOf(ds) >= 0;
+        let cls = 'cal-day' + (hasData ? ' has-data' : ' no-data');
         if (calSelect.length===2) {
             let s=dParse(calSelect[0]), e=dParse(calSelect[1]);
             if (dt>=s && dt<=e) {
@@ -616,7 +619,8 @@ function renderCalendar() {
         } else if (calSelect.length===1 && calSelect[0]===ds) {
             cls += ' range-start range-end';
         }
-        html += '<div class="'+cls+'" data-date="'+ds+'" onclick="calClick(\''+ds+'\')">'+d+'</div>';
+        let onClick = hasData ? 'calClick(\''+ds+'\')' : '';
+        html += '<div class="'+cls+'" data-date="'+ds+'" onclick="'+onClick+'">'+d+'</div>';
     }
     // next month
     let total = first + daysInMonth;
