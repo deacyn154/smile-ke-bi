@@ -560,7 +560,7 @@ if daily is None:
 # =============================================
 # 3d. 丰派线下渠道
 # =============================================
-fp_files = glob.glob(os.path.join(DATA, '商品销售流水信息*.xlsx'))
+fp_files = glob.glob(os.path.join(DATA, '**/商品销售流水信息*.xlsx'), recursive=True)
 if fp_files:
     online_names = set(daily[daily['channel'].isin(['美团闪购','饿了么','京东到家'])]['store_name'].unique())
     all_fp = []
