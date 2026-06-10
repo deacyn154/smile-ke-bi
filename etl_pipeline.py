@@ -108,7 +108,7 @@ print(f'Commission rates: {len(comm_lookup)} stores')
 # =============================================
 # 丰派线下渠道处理
 # =============================================
-def process_fengpai(fp_file, online_store_names, promo_path):
+def process_fengpai(fp_file, online_store_names, cost_map, upc_to_cost):
     """处理丰派商品销售流水表，返回按门店+日期汇总的DataFrame"""
     import re
     df = pd.read_excel(fp_file)
@@ -129,39 +129,6 @@ def process_fengpai(fp_file, online_store_names, promo_path):
     df = df.dropna(subset=['交易时间'])
     months = df['交易时间'].dt.to_period('M').unique()
     print(f'  [丰派] {len(df)} 行销售, 月份: {sorted(str(m) for m in months)}')
-    
-    # 加载最新可用的补货参考表（始终用最新月份的成本）
-    cost_map = {}
-    upc_to_cost = {}
-    # 扫描所有月份目录找补货参考表，取最新的
-    buo_found = None
-    for month_dir in sorted(os.listdir(DATA), reverse=True):
-        if not month_dir.isdigit() or len(month_dir) != 6: continue
-        buo_path = os.path.join(DATA, month_dir, f'补货参考_{month_dir}.xlsx')
-        if os.path.exists(buo_path):
-            buo_found = buo_path
-            break
-    if buo_found:
-        buo = pd.read_excel(buo_found, header=1)
-        buo_sku = buo.iloc[:,4].astype(str).str.strip()
-        buo_cost = pd.to_numeric(buo.iloc[:,7], errors='coerce').fillna(0)
-        buo_upc = buo.iloc[:,19].astype(str).str.strip()
-        for sku, c in zip(buo_sku, buo_cost):
-            sku = str(sku).strip()
-            if sku and sku != 'nan' and sku not in cost_map:
-                cost_map[sku] = float(c)
-        for upc_str, sku in zip(buo_upc, buo_sku):
-            sku = str(sku).strip()
-            if not sku or sku == 'nan': continue
-            upc_str = str(upc_str).strip()
-            if not upc_str or upc_str == 'nan': continue
-            if sku in cost_map:
-                for upc in [u.strip() for u in upc_str.split(',') if u.strip()]:
-                    if upc not in upc_to_cost:
-                        upc_to_cost[upc] = cost_map[sku]
-        print(f'  [丰派] 补货参考: {os.path.basename(buo_found)}, SKU→成本:{len(cost_map)}, UPC→成本:{len(upc_to_cost)}')
-    else:
-        print(f'  [丰派] 未找到任何补货参考表，全部用兜底')
     
     # 门店映射
     SPECIAL_FP_MAP = {
@@ -562,10 +529,36 @@ if daily is None:
 # =============================================
 fp_files = glob.glob(os.path.join(DATA, '**/商品销售流水信息*.xlsx'), recursive=True)
 if fp_files:
+    # 预加载补货参考表（只读一次）
+    cost_map, upc_to_cost = {}, {}
+    for month_dir in sorted(os.listdir(DATA), reverse=True):
+        if not month_dir.isdigit() or len(month_dir) != 6: continue
+        buo_path = os.path.join(DATA, month_dir, f'补货参考_{month_dir}.xlsx')
+        if os.path.exists(buo_path):
+            buo = pd.read_excel(buo_path, header=1)
+            buo_sku = buo.iloc[:,4].astype(str).str.strip()
+            buo_cost = pd.to_numeric(buo.iloc[:,7], errors='coerce').fillna(0)
+            buo_upc = buo.iloc[:,19].astype(str).str.strip()
+            for sku, c in zip(buo_sku, buo_cost):
+                sku = str(sku).strip()
+                if sku and sku != 'nan' and sku not in cost_map:
+                    cost_map[sku] = float(c)
+            for upc_str, sku in zip(buo_upc, buo_sku):
+                sku = str(sku).strip()
+                if not sku or sku == 'nan': continue
+                upc_str = str(upc_str).strip()
+                if not upc_str or upc_str == 'nan': continue
+                if sku in cost_map:
+                    for upc in [u.strip() for u in upc_str.split(',') if u.strip()]:
+                        if upc not in upc_to_cost:
+                            upc_to_cost[upc] = cost_map[sku]
+            print(f'  [丰派] 补货参考: {os.path.basename(buo_path)}, SKU:{len(cost_map)}, UPC:{len(upc_to_cost)}')
+            break
+
     online_names = set(daily[daily['channel'].isin(['美团闪购','饿了么','京东到家'])]['store_name'].unique())
     all_fp = []
     for fp_file in fp_files:
-        fp_daily = process_fengpai(fp_file, online_names, os.path.join(WAREHOUSE, 'promo_daily.xlsx'))
+        fp_daily = process_fengpai(fp_file, online_names, cost_map, upc_to_cost)
         if fp_daily is not None:
             all_fp.append(fp_daily)
     if all_fp:
