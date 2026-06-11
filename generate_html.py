@@ -136,7 +136,7 @@ if os.path.exists(cost_path):
         print(f'Store cost load warning: {e}')
 store_cost_json = json.dumps(store_cost_map, ensure_ascii=False)
 
-# 6月绩效进度数据
+# 当前月绩效进度数据
 perf_data = []
 try:
     fp_duty = os.path.join(BASE, '数据表', '基础信息表', '门店分工.xlsx')
@@ -147,10 +147,14 @@ try:
         target_map = {}
         for _, r in targets.iterrows():
             target_map[r['姓名']] = {'orders': int(r['订单量']), 'profit': float(r['门店毛利（去推广不去抽佣）'])}
-        df['qn_sid'] = df['qn_store_id'].apply(lambda x: str(int(float(x))) if pd.notna(x) else '')
+        # 只取最新月份数据（绩效按月考核）
+        perf_month = max_date.month
+        perf_df = df[pd.to_datetime(df['日期']).dt.month == perf_month].copy()
+        perf_df['qn_sid'] = perf_df['qn_store_id'].apply(lambda x: str(int(float(x))) if pd.notna(x) else '')
+        perf_days = perf_df['日期'].nunique()
         mt_stores = dict(zip(duty['牵牛花id'], duty['负责人']))
         for ch, owner in [('美团闪购', None), ('饿了么', '刘再坤'), ('京东到家', '侯龙浩')]:
-            ch_df = df[df['channel']==ch].copy()
+            ch_df = perf_df[perf_df['channel']==ch].copy()
             if ch == '美团闪购':
                 ch_df = ch_df[ch_df['qn_sid'].isin(mt_stores.keys())]
                 ch_df['负责人'] = ch_df['qn_sid'].map(mt_stores)
@@ -170,7 +174,7 @@ try:
         perf_data = [seen.setdefault(p['name'], p) for p in perf_data if p['name'] not in seen]
 except Exception as e:
     print(f'Perf data warning: {e}')
-perf_json = json.dumps(perf_data, ensure_ascii=False)
+perf_json = json.dumps({'month': max_date.month, 'days': perf_days if 'perf_days' in dir() else 0, 'data': perf_data}, ensure_ascii=False)
 
 channels = sorted(df['channel'].unique().tolist())
 dates_all = sorted(df['日期'].unique().tolist())
@@ -468,11 +472,11 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 .modal-close:hover { background:rgba(255,255,255,0.05); color:var(--text); }
 .modal-body { padding:16px 20px; overflow-y:auto; flex:1; }
 .modal-chart { min-height:260px; margin-bottom:12px; }
-.perf-table { width:100%; border-collapse:collapse; font-size:13px; }
-.perf-table th { background:#1a1d2e; color:#f3f4f6; padding:10px 12px; text-align:right; border-bottom:2px solid var(--border); font-weight:600; white-space:nowrap; }
+.perf-table { width:100%; border-collapse:collapse; font-size:14px; }
+.perf-table th { background:#1a1d2e; color:#f3f4f6; padding:10px 12px; text-align:right; border-bottom:2px solid var(--border); font-weight:700; white-space:nowrap; }
 .perf-table th:first-child { text-align:left; }
-.perf-table td { padding:10px 12px; text-align:right; border-bottom:1px solid var(--border); color:#d1d5db; }
-.perf-table td:first-child { text-align:left; font-weight:600; color:#f3f4f6; }
+.perf-table td { padding:10px 12px; text-align:right; border-bottom:1px solid var(--border); color:#f3f4f6; font-weight:500; }
+.perf-table td:first-child { text-align:left; font-weight:700; color:#ffffff; }
 .perf-table .bar-cell { position:relative; }
 .perf-table .bar-cell .bar { position:absolute; left:0; top:2px; bottom:2px; border-radius:3px; opacity:0.4; z-index:0; }
 .perf-table .bar-cell span { position:relative; z-index:1; }
@@ -569,7 +573,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
     <div class="modal-overlay" id="perfModal" onclick="if(event.target===this)this.classList.remove('show')">
         <div class="modal-box">
             <div class="modal-header">
-                <h3>📊 6月绩效进度 <span style="font-size:12px;color:#6b7280;font-weight:400" id="perfDays"></span></h3>
+                <h3>📊 <span id="perfMonth">6月</span>绩效进度 <span style="font-size:12px;color:#6b7280;font-weight:400" id="perfDays"></span></h3>
                 <button class="modal-close" onclick="document.getElementById('perfModal').classList.remove('show')">×</button>
             </div>
             <table class="perf-table">
@@ -725,7 +729,7 @@ const shortNames = ''' + short_map_json + ''';
 const searchKeys = ''' + search_map_json + ''';
 const storeRegionMap = ''' + store_region_json + ''';  // 门店→所属地区
 const storeCostMap = ''' + store_cost_json + ''';  // 门店→{cost, qnid}
-const perfData = ''' + perf_json + ''';  // 6月绩效进度
+const perfData = ''' + perf_json + ''';  // 当前月绩效进度
 
 // 门店名 → 牵牛花门店ID 映射（导出Excel时用）
 const storeQnMap = {};
@@ -2117,10 +2121,11 @@ function openModal(kpiType) {
 function barPct(v, t) { if(!t)return'';let p=v/t*100;let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class=\"bar-cell\" style=\"position:relative\"><div class=\"bar\" style=\"width:'+Math.min(p,100)+'%;background:var(--'+c.replace('progress-','')+')\"></div><span class=\"'+c+'\">'+p.toFixed(1)+'%</span></td>'; }
 
 function showPerfModal() {
-    if (!perfData || !perfData.length) return;
-    document.getElementById('perfDays').textContent = '(截止数据最新日期)';
+    if (!perfData || !perfData.data || !perfData.data.length) return;
+    document.getElementById('perfMonth').textContent = perfData.month + '月';
+    document.getElementById('perfDays').textContent = '(截止'+perfData.month+'月, '+perfData.days+'天数据)';
     let rows = '';
-    perfData.forEach(p => {
+    perfData.data.forEach(p => {
         rows += '<tr><td>'+p.name+'</td>'
             +'<td>'+p.orders.toLocaleString()+'</td>'
             +'<td>'+p.target_orders.toLocaleString()+'</td>'
