@@ -6,7 +6,7 @@ Generate self-contained HTML BI dashboard v2:
   - New fields: 实收/门店毛利/抽佣毛利/毛利率/实收客单/单均配送成本
 """
 import pandas as pd
-import json, os, re
+import json, os, re, calendar
 
 BASE = r'E:\Desktop\工作文件（月度）\claw制作BI'
 WAREHOUSE = os.path.join(BASE, 'warehouse')
@@ -174,7 +174,16 @@ try:
         perf_data = [seen.setdefault(p['name'], p) for p in perf_data if p['name'] not in seen]
 except Exception as e:
     print(f'Perf data warning: {e}')
-perf_json = json.dumps({'month': max_date.month, 'days': perf_days if 'perf_days' in dir() else 0, 'data': perf_data}, ensure_ascii=False)
+perf_json = json.dumps({
+    'month': max_date.month, 'year': max_date.year,
+    'days': perf_days if 'perf_days' in dir() else 0,
+    'total_days': calendar.monthrange(max_date.year, max_date.month)[1],
+    'data': perf_data,
+    'summary': {'total_orders': sum(p['orders'] for p in perf_data),
+                'total_target_orders': sum(p['target_orders'] for p in perf_data),
+                'total_profit': round(sum(p['profit'] for p in perf_data), 2),
+                'total_target_profit': round(sum(p['target_profit'] for p in perf_data), 2)}
+}, ensure_ascii=False)
 
 channels = sorted(df['channel'].unique().tolist())
 dates_all = sorted(df['日期'].unique().tolist())
@@ -573,12 +582,19 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
     <div class="modal-overlay" id="perfModal" onclick="if(event.target===this)this.classList.remove('show')">
         <div class="modal-box">
             <div class="modal-header">
-                <h3>📊 <span id="perfMonth">6月</span>绩效进度 <span style="font-size:12px;color:#6b7280;font-weight:400" id="perfDays"></span></h3>
+                <h3>📊 <span id="perfMonth">6月</span>绩效进度 <span style="font-size:12px;color:#6b7280;font-weight:400" id="perfDays">(加载中...)</span></h3>
+                <div style="font-size:13px;color:#374151;font-weight:600">
+                    🕐 时间进度 <span id="perfTimeBar">10/30天 (33.3%)</span>
+                    <span style="display:inline-block;width:120px;height:8px;background:#e5e7eb;border-radius:4px;vertical-align:middle;margin-left:6px;overflow:hidden">
+                        <span id="perfTimeFill" style="display:block;height:100%;background:var(--blue);border-radius:4px;width:33%"></span>
+                    </span>
+                </div>
                 <button class="modal-close" onclick="document.getElementById('perfModal').classList.remove('show')">×</button>
             </div>
             <table class="perf-table">
                 <thead><tr><th>负责人</th><th>单量</th><th>目标</th><th>进度</th><th>去推广毛利</th><th>毛利目标</th><th>进度</th></tr></thead>
                 <tbody id="perfBody"></tbody>
+                <tfoot id="perfFoot"></tfoot>
             </table>
         </div>
     </div>
@@ -2122,8 +2138,14 @@ function barPct(v, t) { if(!t)return'';let p=v/t*100;let c=p>=45?'progress-good'
 
 function showPerfModal() {
     if (!perfData || !perfData.data || !perfData.data.length) return;
+    // 标题
     document.getElementById('perfMonth').textContent = perfData.month + '月';
-    document.getElementById('perfDays').textContent = '(截止'+perfData.month+'月, '+perfData.days+'天数据)';
+    // 时间进度
+    let timePct = perfData.total_days ? (perfData.days / perfData.total_days * 100) : 0;
+    document.getElementById('perfTimeBar').textContent = perfData.days + '/' + perfData.total_days + '天 (' + timePct.toFixed(1) + '%)';
+    document.getElementById('perfTimeFill').style.width = Math.min(timePct, 100) + '%';
+    document.getElementById('perfDays').textContent = '(截止' + perfData.month + '月, ' + perfData.days + '天数据)';
+    // 明细行
     let rows = '';
     perfData.data.forEach(p => {
         rows += '<tr><td>'+p.name+'</td>'
@@ -2136,6 +2158,19 @@ function showPerfModal() {
             +'</tr>';
     });
     document.getElementById('perfBody').innerHTML = rows;
+    // 汇总行
+    if (perfData.summary) {
+        let s = perfData.summary;
+        document.getElementById('perfFoot').innerHTML = '<tr style="background:#f0f5ff;font-weight:700;border-top:2px solid #1a1d2e">'
+            +'<td style="color:#1a1d2e">📊 合计</td>'
+            +'<td>'+s.total_orders.toLocaleString()+'</td>'
+            +'<td>'+s.total_target_orders.toLocaleString()+'</td>'
+            +barPct(s.total_orders, s.total_target_orders)
+            +'<td>¥'+s.total_profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
+            +'<td>¥'+s.total_target_profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
+            +barPct(s.total_profit, s.total_target_profit)
+            +'</tr>';
+    }
     document.getElementById('perfModal').classList.add('show');
 }
 
