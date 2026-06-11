@@ -1884,7 +1884,7 @@ function openModal(kpiType) {
     }, 50);
 }
 
-function barPct(v, t) { if(!t)return'';let p=v/t*100;let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class="bar-cell" style="position:relative"><div class="bar" style="width:'+Math.min(p,100)+'%;background:var(--'+c.replace('progress-','')+')"></div><span class="'+c+'">'+p.toFixed(1)+'%</span></td>'; }
+function barPct(v, t, timePct) { if(!t)return'';let p=v/t*100;if(timePct!==undefined&&p<timePct)return'<td class="bar-cell" style="position:relative"><div class="bar" style="width:'+Math.min(p,100)+'%;background:var(--red)"></div><span style="color:var(--red);font-weight:600">'+p.toFixed(1)+'%</span></td>';let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class="bar-cell" style="position:relative"><div class="bar" style="width:'+Math.min(p,100)+'%;background:var(--'+c.replace('progress-','')+')"></div><span class="'+c+'">'+p.toFixed(1)+'%</span></td>'; }
 
 function showPerfModal() {
     if (!perfData || !perfData.data || !perfData.data.length) return;
@@ -1901,10 +1901,10 @@ function showPerfModal() {
         rows += '<tr><td>'+p.name+'</td>'
             +'<td>'+p.orders.toLocaleString()+'</td>'
             +'<td>'+p.target_orders.toLocaleString()+'</td>'
-            +barPct(p.orders, p.target_orders)
+            +barPct(p.orders, p.target_orders, timePct)
             +'<td>¥'+p.profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
             +'<td>¥'+p.target_profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
-            +barPct(p.profit, p.target_profit)
+            +barPct(p.profit, p.target_profit, timePct)
             +'</tr>';
     });
     document.getElementById('perfBody').innerHTML = rows;
@@ -1915,10 +1915,10 @@ function showPerfModal() {
             +'<td style="color:#1a1d2e">📊 合计</td>'
             +'<td>'+s.total_orders.toLocaleString()+'</td>'
             +'<td>'+s.total_target_orders.toLocaleString()+'</td>'
-            +barPct(s.total_orders, s.total_target_orders)
+            +barPct(s.total_orders, s.total_target_orders, timePct)
             +'<td>¥'+s.total_profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
             +'<td>¥'+s.total_target_profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
-            +barPct(s.total_profit, s.total_target_profit)
+            +barPct(s.total_profit, s.total_target_profit, timePct)
             +'</tr>';
     }
     document.getElementById('perfModal').classList.add('show');
