@@ -136,6 +136,42 @@ if os.path.exists(cost_path):
         print(f'Store cost load warning: {e}')
 store_cost_json = json.dumps(store_cost_map, ensure_ascii=False)
 
+# 6月绩效进度数据
+perf_data = []
+try:
+    fp_duty = os.path.join(BASE, '数据表', '基础信息表', '门店分工.xlsx')
+    if os.path.exists(fp_duty):
+        duty = pd.read_excel(fp_duty, sheet_name='门店').dropna(subset=['负责人'])
+        duty['牵牛花id'] = duty['牵牛花id'].astype(int).astype(str)
+        targets = pd.read_excel(fp_duty, sheet_name='目标', header=1).dropna(subset=['姓名'])
+        target_map = {}
+        for _, r in targets.iterrows():
+            target_map[r['姓名']] = {'orders': int(r['订单量']), 'profit': float(r['门店毛利（去推广不去抽佣）'])}
+        df['qn_sid'] = df['qn_store_id'].apply(lambda x: str(int(float(x))) if pd.notna(x) else '')
+        mt_stores = dict(zip(duty['牵牛花id'], duty['负责人']))
+        for ch, owner in [('美团闪购', None), ('饿了么', '刘再坤'), ('京东到家', '侯龙浩')]:
+            ch_df = df[df['channel']==ch].copy()
+            if ch == '美团闪购':
+                ch_df = ch_df[ch_df['qn_sid'].isin(mt_stores.keys())]
+                ch_df['负责人'] = ch_df['qn_sid'].map(mt_stores)
+            else:
+                ch_df = ch_df[ch_df['qn_sid'] != '1150787']
+                ch_df['负责人'] = owner
+            grp = ch_df.groupby('负责人').agg(o=('order_cnt','sum'),p=('real_profit','sum')).round(2).reset_index()
+            for _, r in grp.iterrows():
+                name = r['负责人']
+                t = target_map.get(name, {})
+                perf_data.append({
+                    'name': name, 'orders': int(r['o']), 'profit': round(float(r['p']), 2),
+                    'target_orders': t.get('orders',0), 'target_profit': t.get('profit',0)
+                })
+        # dedup same name
+        seen = {}
+        perf_data = [seen.setdefault(p['name'], p) for p in perf_data if p['name'] not in seen]
+except Exception as e:
+    print(f'Perf data warning: {e}')
+perf_json = json.dumps(perf_data, ensure_ascii=False)
+
 channels = sorted(df['channel'].unique().tolist())
 dates_all = sorted(df['日期'].unique().tolist())
 
@@ -432,6 +468,17 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 .modal-close:hover { background:rgba(255,255,255,0.05); color:var(--text); }
 .modal-body { padding:16px 20px; overflow-y:auto; flex:1; }
 .modal-chart { min-height:260px; margin-bottom:12px; }
+.perf-table { width:100%; border-collapse:collapse; font-size:13px; }
+.perf-table th { background:#1a1d2e; color:#f3f4f6; padding:10px 12px; text-align:right; border-bottom:2px solid var(--border); font-weight:600; white-space:nowrap; }
+.perf-table th:first-child { text-align:left; }
+.perf-table td { padding:10px 12px; text-align:right; border-bottom:1px solid var(--border); color:#d1d5db; }
+.perf-table td:first-child { text-align:left; font-weight:600; color:#f3f4f6; }
+.perf-table .bar-cell { position:relative; }
+.perf-table .bar-cell .bar { position:absolute; left:0; top:2px; bottom:2px; border-radius:3px; opacity:0.4; z-index:0; }
+.perf-table .bar-cell span { position:relative; z-index:1; }
+.progress-good { color:#5AD8A6 !important; }
+.progress-warn { color:#F6BD16 !important; }
+.progress-bad { color:#E86452 !important; }
 </style>
 </head>
 <body>
@@ -518,8 +565,21 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
         <span class="alert-msg" id="alertMsg"></span>
         <span class="alert-dismiss" onclick="document.getElementById('alertBanner').classList.remove('show')">×</span>
     </div>
+    <!-- 绩效弹窗 -->
+    <div class="modal-overlay" id="perfModal" onclick="if(event.target===this)this.classList.remove('show')">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3>📊 6月绩效进度 <span style="font-size:12px;color:#6b7280;font-weight:400" id="perfDays"></span></h3>
+                <button class="modal-close" onclick="document.getElementById('perfModal').classList.remove('show')">×</button>
+            </div>
+            <table class="perf-table">
+                <thead><tr><th>负责人</th><th>单量</th><th>目标</th><th>进度</th><th>去推广毛利</th><th>毛利目标</th><th>进度</th></tr></thead>
+                <tbody id="perfBody"></tbody>
+            </table>
+        </div>
+    </div>
     <div class="summary-panel" id="summaryPanel">
-        <h3>📋 数据快报</h3>
+        <h3 style="cursor:pointer;user-select:none" onclick="showPerfModal()" title="点击查看6月绩效进度">📋 数据快报 🔍</h3>
         <div class="summary-text" id="summaryText"></div>
     </div>
 
@@ -665,6 +725,7 @@ const shortNames = ''' + short_map_json + ''';
 const searchKeys = ''' + search_map_json + ''';
 const storeRegionMap = ''' + store_region_json + ''';  // 门店→所属地区
 const storeCostMap = ''' + store_cost_json + ''';  // 门店→{cost, qnid}
+const perfData = ''' + perf_json + ''';  // 6月绩效进度
 
 // 门店名 → 牵牛花门店ID 映射（导出Excel时用）
 const storeQnMap = {};
@@ -2051,6 +2112,26 @@ function openModal(kpiType) {
             margin: { l: 50, r: 20, t: 50, b: 80 }
         }, plotlyCfg);
     }, 50);
+}
+
+function barPct(v, t) { if(!t)return'';let p=v/t*100;let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class=\"bar-cell\" style=\"position:relative\"><div class=\"bar\" style=\"width:'+Math.min(p,100)+'%;background:var(--'+c.replace('progress-','')+')\"></div><span class=\"'+c+'\">'+p.toFixed(1)+'%</span></td>'; }
+
+function showPerfModal() {
+    if (!perfData || !perfData.length) return;
+    document.getElementById('perfDays').textContent = '(截止数据最新日期)';
+    let rows = '';
+    perfData.forEach(p => {
+        rows += '<tr><td>'+p.name+'</td>'
+            +'<td>'+p.orders.toLocaleString()+'</td>'
+            +'<td>'+p.target_orders.toLocaleString()+'</td>'
+            +barPct(p.orders, p.target_orders)
+            +'<td>¥'+p.profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
+            +'<td>¥'+p.target_profit.toLocaleString(undefined,{minimumFractionDigits:2})+'</td>'
+            +barPct(p.profit, p.target_profit)
+            +'</tr>';
+    });
+    document.getElementById('perfBody').innerHTML = rows;
+    document.getElementById('perfModal').classList.add('show');
 }
 
 function closeModal() {
