@@ -475,8 +475,8 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 .perf-table { width:100%; border-collapse:collapse; font-size:14px; }
 .perf-table th { background:#1a1d2e; color:#f3f4f6; padding:10px 12px; text-align:right; border-bottom:2px solid var(--border); font-weight:700; white-space:nowrap; }
 .perf-table th:first-child { text-align:left; }
-.perf-table td { padding:10px 12px; text-align:right; border-bottom:1px solid var(--border); color:#f3f4f6; font-weight:500; }
-.perf-table td:first-child { text-align:left; font-weight:700; color:#ffffff; }
+.perf-table td { padding:10px 12px; text-align:right; border-bottom:1px solid var(--border); color:#1f2937; font-weight:600; }
+.perf-table td:first-child { text-align:left; font-weight:700; color:#111827; }
 .perf-table .bar-cell { position:relative; }
 .perf-table .bar-cell .bar { position:absolute; left:0; top:2px; bottom:2px; border-radius:3px; opacity:0.4; z-index:0; }
 .perf-table .bar-cell span { position:relative; z-index:1; }
