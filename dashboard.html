@@ -236,9 +236,6 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 .perf-table th:first-child { text-align:left; }
 .perf-table td { padding:10px 12px; text-align:right; border-bottom:1px solid var(--border); color:#1f2937; font-weight:600; }
 .perf-table td:first-child { text-align:left; font-weight:700; color:#111827; }
-.perf-table .bar-cell { position:relative; }
-.perf-table .bar-cell .bar { position:absolute; left:0; top:2px; bottom:2px; border-radius:3px; opacity:0.4; z-index:0; }
-.perf-table .bar-cell span { position:relative; z-index:1; }
 .progress-good { color:#5AD8A6 !important; }
 .progress-warn { color:#F6BD16 !important; }
 .progress-bad { color:#E86452 !important; }
@@ -1884,7 +1881,7 @@ function openModal(kpiType) {
     }, 50);
 }
 
-function barPct(v, t, timePct) { if(!t)return'';let p=v/t*100;if(timePct!==undefined&&p<timePct)return'<td class="bar-cell" style="position:relative"><div class="bar" style="width:'+Math.min(p,100)+'%;background:var(--red)"></div><span style="color:var(--red);font-weight:600">'+p.toFixed(1)+'%</span></td>';let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class="bar-cell" style="position:relative"><div class="bar" style="width:'+Math.min(p,100)+'%;background:var(--'+c.replace('progress-','')+')"></div><span class="'+c+'">'+p.toFixed(1)+'%</span></td>'; }
+function barPct(v, t, timePct) { if(!t)return'';let p=v/t*100;if(timePct!==undefined&&p<timePct)return'<td style="color:var(--red);font-weight:600">'+p.toFixed(1)+'%</td>';let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class="'+c+'">'+p.toFixed(1)+'%</td>'; }
 
 function showPerfModal() {
     if (!perfData || !perfData.data || !perfData.data.length) return;
