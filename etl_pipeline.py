@@ -629,6 +629,11 @@ if os.path.exists(wh_path):
     merged = merged.sort_values(['日期','store_name','channel']).reset_index(drop=True)
 else:
     merged = daily
+# 去重：同日期+门店+渠道只保留最后一条
+n_before = len(merged)
+merged = merged.drop_duplicates(subset=['日期','store_name','channel'], keep='last')
+if len(merged) < n_before:
+    print(f'  去重: {n_before} -> {len(merged)}行 (移除{n_before-len(merged)}行)')
 merged.to_excel(wh_path, index=False)
 print(f'\nWarehouse: {wh_path} ({len(merged)} rows, {len(daily)} new)')
 
