@@ -2335,6 +2335,12 @@ initDashboard();
 with open(OUTPUT, 'w', encoding='utf-8') as f:
     f.write(html)
 
+# 同步到 index.html（GitHub Pages 入口文件）
+INDEX_OUT = os.path.join(BASE, 'index.html')
+with open(INDEX_OUT, 'w', encoding='utf-8') as f:
+    f.write(html)
+
 print(f'Generated: {OUTPUT}')
+print(f'Synced  : {INDEX_OUT}')
 print(f'Size: {os.path.getsize(OUTPUT) / 1024:.0f} KB')
 print(f'Data: {len(data_records)} rows, {len(dates_all)} days, {len(stores_full)} stores')
