@@ -533,6 +533,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
                 <button class="date-btn" onclick="setDateRange('yesterday')">昨天</button>
                 <button class="date-btn" onclick="setDateRange('last7')">近7天</button>
                 <button class="date-btn" onclick="setDateRange('last30')">近30天</button>
+                <button class="date-btn" onclick="setDateRange('thisMonth')">本月</button>
                 <button class="date-btn" onclick="setDateRange('lastMonth')">上月</button>
                 <button class="date-btn active" onclick="toggleCalendar('day')">自定义日</button>
                 <button class="date-btn" onclick="toggleCalendar('month')">自定义月</button>
@@ -840,6 +841,10 @@ function setDateRange(mode) {
             let d2 = new Date(); d2.setMonth(d2.getMonth()-1);
             let [lm1,lm2] = calcMonthBounds(d2);
             from = dFmt(lm1); to = dFmt(lm2);
+            break;
+        case 'thisMonth':
+            let [tm1,tm2] = calcMonthBounds(new Date());
+            from = dFmt(tm1); to = dFmt(tm2);
             break;
         default: break;
     }
