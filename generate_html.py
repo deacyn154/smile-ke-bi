@@ -16,10 +16,10 @@ OUTPUT = os.path.join(BASE, 'dashboard.html')
 df = pd.read_excel(os.path.join(WAREHOUSE, 'daily_store_channel_profit.xlsx'))
 df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
 
-# 仪表盘只取最近90天，warehouse原始文件保持全量
+# 仪表盘只取最近365天(12个月)，warehouse原始文件保持全量
 df['_date_sort'] = pd.to_datetime(df['日期'])
 max_date = df['_date_sort'].max()
-cutoff = max_date - pd.Timedelta(days=90)
+cutoff = max_date - pd.Timedelta(days=365)
 df = df[df['_date_sort'] >= cutoff].drop(columns=['_date_sort'])
 
 promo = None
@@ -534,7 +534,8 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
                 <button class="date-btn" onclick="setDateRange('last7')">近7天</button>
                 <button class="date-btn" onclick="setDateRange('last30')">近30天</button>
                 <button class="date-btn" onclick="setDateRange('lastMonth')">上月</button>
-                <button class="date-btn active" onclick="toggleCalendar()">自定义</button>
+                <button class="date-btn active" onclick="toggleCalendar('day')">自定义日</button>
+                <button class="date-btn" onclick="toggleCalendar('month')">自定义月</button>
             </div>
         </div>
         <div class="calendar-wrap" id="calendarWrap">
@@ -857,7 +858,14 @@ function setDateRange(mode) {
     refresh();
 }
 
-function toggleCalendar() {
+let calMode = 'day'; // 'day' or 'month'
+function toggleCalendar(mode) {
+    calMode = mode || 'day';
+    // Update button active state
+    document.querySelectorAll('.date-btn[onclick*="toggleCalendar"]').forEach(b=>b.classList.remove('active'));
+    let btn = document.querySelector('.date-btn[onclick*="'+calMode+'"]');
+    if (btn) btn.classList.add('active');
+    
     calOpen = !calOpen;
     document.getElementById('calendarWrap').classList.toggle('show', calOpen);
     if (calOpen) {
@@ -871,6 +879,53 @@ function toggleCalendar() {
 function renderCalendar() {
     const y = calDate.getFullYear(), m = calDate.getMonth();
     document.getElementById('calTitle').textContent = y+'年'+(m+1)+'月';
+    
+    if (calMode === 'month') {
+        renderMonthSelector(y, m);
+        return;
+    }
+    renderDayGrid(y, m);
+}
+
+function renderMonthSelector(y, m) {
+    // Show 12 months grid for quick month range selection
+    let html = '<div class="cal-grid" style="grid-template-columns:repeat(4,1fr);">';
+    const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
+    for (let i=0; i<12; i++) {
+        let d = new Date(y, i, 1);
+        let ds = dFmt(d);
+        let hasData = allDates.indexOf(ds) >= 0;
+        let cls = 'cal-day' + (hasData ? ' has-data' : ' no-data');
+        html += '<div class="'+cls+'" style="padding:12px 8px;font-size:14px;" onclick="selectMonth('+y+','+i+')">'+months[i]+'</div>';
+    }
+    html += '</div>';
+    document.getElementById('calGrid').innerHTML = html;
+}
+
+function selectMonth(year, month) {
+    let firstDay = new Date(year, month, 1);
+    let lastDay = new Date(year, month+1, 0);
+    let from = dFmt(firstDay), to = dFmt(lastDay);
+    
+    // Find actual data range within this month
+    let monthDates = allDates.filter(d => d >= from && d <= to);
+    if (monthDates.length > 0) {
+        from = monthDates[0]; to = monthDates[monthDates.length-1];
+    }
+    
+    dateFrom = from; dateTo = to;
+    calSelect = [from, to];
+    calOpen = false;
+    document.getElementById('calendarWrap').classList.remove('show');
+    document.querySelectorAll('.date-btn').forEach(b=>b.classList.remove('active'));
+    
+    let drLabel = dateFrom === dateTo ? dateFrom : dateFrom + ' ~ ' + dateTo;
+    document.getElementById('dateRangeLabel').textContent = '统计时段: ' + drLabel;
+    document.querySelectorAll('.section-date-tag').forEach(el => { el.textContent = drLabel; });
+    refresh();
+}
+
+function renderDayGrid(y, m) {
     const first = new Date(y,m,1).getDay() || 7;
     const daysInMonth = new Date(y,m+1,0).getDate();
     const daysInPrev = new Date(y,m,0).getDate();
