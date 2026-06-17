@@ -874,9 +874,20 @@ function getFilteredPromo() {
 // ============ 环比 ============
 function getPrevData(data) {
     const from = dParse(dateFrom), to = dParse(dateTo);
-    const days = Math.round((to - from) / (24*60*60*1000)) + 1;
-    const prevEnd = new Date(from); prevEnd.setDate(prevEnd.getDate() - 1);
-    const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
+    let prevStart, prevEnd;
+    // 检测是否为完整月 (from=1号, to=月末最后一天)
+    const lastDayOfMonth = new Date(from.getFullYear(), from.getMonth()+1, 0).getDate();
+    const isFullMonth = (from.getDate() === 1 && to.getDate() === lastDayOfMonth);
+    if (isFullMonth) {
+        // 整月对比: 直接取上个月整月 (如3.1-3.31 vs 2.1-2.28)
+        prevStart = new Date(from.getFullYear(), from.getMonth()-1, 1);
+        prevEnd = new Date(from.getFullYear(), from.getMonth(), 0);
+    } else {
+        // 其他标签: 同比相同天数
+        const days = Math.round((to - from) / (24*60*60*1000)) + 1;
+        prevEnd = new Date(from); prevEnd.setDate(prevEnd.getDate() - 1);
+        prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
+    }
     const pf = dFmt(prevStart), pt = dFmt(prevEnd);
     return rawData.filter(r =>
         r['日期'] >= pf && r['日期'] <= pt &&
