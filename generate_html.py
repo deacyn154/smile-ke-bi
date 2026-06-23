@@ -1,32 +1,56 @@
 # -*- coding: utf-8 -*-
 """
-Generate self-contained HTML BI dashboard v2:
+Generate self-contained HTML BI dashboard v3:
+  - Data source: MySQL smile_ke_bi (fallback: Excel warehouse)
   - Calendar date picker + quick buttons
   - Store search + chips (short names)
-  - New fields: 实收/门店毛利/抽佣毛利/毛利率/实收客单/单均配送成本
 """
 import pandas as pd
 import json, os, re, calendar
+from sqlalchemy import create_engine, text
 
 BASE = r'E:\Desktop\工作文件（月度）\claw制作BI'
 WAREHOUSE = os.path.join(BASE, 'warehouse')
 OUTPUT = os.path.join(BASE, 'dashboard.html')
 
-# Load data
-df = pd.read_excel(os.path.join(WAREHOUSE, 'daily_store_channel_profit.xlsx'))
-df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
+# --- Data Source: MySQL (primary) or Excel (fallback) ---
+MYSQL_DSN = 'mysql+pymysql://root:@localhost:3306/smile_ke_bi?charset=utf8mb4'
+USE_MYSQL = False
+try:
+    engine = create_engine(MYSQL_DSN)
+    with engine.connect() as conn:
+        conn.execute(text('SELECT 1'))
+    USE_MYSQL = True
+    print('Data source: MySQL')
+except Exception as e:
+    print(f'MySQL unavailable ({e}), fallback to Excel')
 
-# 仪表盘只取最近365天(12个月)，warehouse原始文件保持全量
+if USE_MYSQL:
+    query = """
+        SELECT dt AS `日期`, store_name, qn_store_id, channel,
+               order_cnt, revenue, real_profit, commission_fee, commission_profit,
+               neg_cnt, delivery_fee, delivery_order_cnt, promo_fee
+        FROM daily_profit
+    """
+    df = pd.read_sql(query, engine)
+    df['日期'] = df['日期'].astype(str)
+    promo = pd.read_sql("SELECT dt AS `日期`, store_name, qn_store_id, channel, promo_fee FROM daily_promo", engine)
+    promo['日期'] = promo['日期'].astype(str)
+else:
+    df = pd.read_excel(os.path.join(WAREHOUSE, 'daily_store_channel_profit.xlsx'))
+    df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
+    promo = None
+    promo_path = os.path.join(WAREHOUSE, 'promo_daily.xlsx')
+    if os.path.exists(promo_path):
+        promo = pd.read_excel(promo_path)
+        promo['日期'] = pd.to_datetime(promo['日期']).dt.strftime('%Y-%m-%d')
+
+# 仪表盘只取最近365天
 df['_date_sort'] = pd.to_datetime(df['日期'])
 max_date = df['_date_sort'].max()
 cutoff = max_date - pd.Timedelta(days=365)
 df = df[df['_date_sort'] >= cutoff].drop(columns=['_date_sort'])
-
-promo = None
-promo_path = os.path.join(WAREHOUSE, 'promo_daily.xlsx')
-if os.path.exists(promo_path):
-    promo = pd.read_excel(promo_path)
-    promo['日期'] = pd.to_datetime(promo['日期']).dt.strftime('%Y-%m-%d')
+if promo is not None and len(promo) > 0:
     promo['_date_sort'] = pd.to_datetime(promo['日期'])
     promo = promo[promo['_date_sort'] >= cutoff].drop(columns=['_date_sort'])
 
@@ -1124,9 +1148,20 @@ function getFilteredPromo() {
 // ============ 环比 ============
 function getPrevData(data) {
     const from = dParse(dateFrom), to = dParse(dateTo);
-    const days = Math.round((to - from) / (24*60*60*1000)) + 1;
-    const prevEnd = new Date(from); prevEnd.setDate(prevEnd.getDate() - 1);
-    const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
+    let prevStart, prevEnd;
+    // 检测是否为完整月 (from=1号, to=月末最后一天)
+    const lastDayOfMonth = new Date(from.getFullYear(), from.getMonth()+1, 0).getDate();
+    const isFullMonth = (from.getDate() === 1 && to.getDate() === lastDayOfMonth);
+    if (isFullMonth) {
+        // 整月对比: 直接取上个月整月 (如3.1-3.31 vs 2.1-2.28)
+        prevStart = new Date(from.getFullYear(), from.getMonth()-1, 1);
+        prevEnd = new Date(from.getFullYear(), from.getMonth(), 0);
+    } else {
+        // 其他标签: 同比相同天数
+        const days = Math.round((to - from) / (24*60*60*1000)) + 1;
+        prevEnd = new Date(from); prevEnd.setDate(prevEnd.getDate() - 1);
+        prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - days + 1);
+    }
     const pf = dFmt(prevStart), pt = dFmt(prevEnd);
     return rawData.filter(r =>
         r['日期'] >= pf && r['日期'] <= pt &&
