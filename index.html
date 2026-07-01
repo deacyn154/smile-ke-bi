@@ -582,10 +582,12 @@ function setDateRange(mode) {
             from = yesterday(); to = from;
             break;
         case 'last7':
-            to = yesterday(); from = dFmt(new Date(Date.now()-7*86400000));
+            to = allDates[allDates.length-1];
+            from = dFmt(new Date(dParse(to).getTime()-6*86400000));
             break;
         case 'last30':
-            to = yesterday(); from = dFmt(new Date(Date.now()-30*86400000));
+            to = allDates[allDates.length-1];
+            from = dFmt(new Date(dParse(to).getTime()-29*86400000));
             break;
         case 'lastMonth':
             let d2 = new Date(); d2.setMonth(d2.getMonth()-1);
