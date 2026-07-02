@@ -71,7 +71,7 @@ def clean(records):
 
 data_records = clean(df.to_dict(orient='records'))
 # 精简字段，减少文件体积
-KEEP_FIELDS = {'store_name','日期','channel','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee'}
+KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee'}
 data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
 
@@ -160,6 +160,23 @@ if os.path.exists(cost_path):
         print(f'Store cost load warning: {e}')
 store_cost_json = json.dumps(store_cost_map, ensure_ascii=False)
 
+# 门店→美团渠道门店ID 映射（导出Excel用）
+mapping_path = os.path.join(BASE, 'channel_store_mapping.xlsx')
+store_meituan_map = {}
+if os.path.exists(mapping_path):
+    try:
+        mapping_df = pd.read_excel(mapping_path)
+        for _, row in mapping_df.iterrows():
+            if str(row.get('channel', '')) == '美团闪购':
+                qn_name = str(row.get('qn_store_name', '')).strip()
+                mt_id = str(row.get('channel_store_id', '')).strip()
+                if qn_name and mt_id and mt_id not in ('nan', 'None', ''):
+                    store_meituan_map[qn_name] = mt_id
+        print(f'Meituan store map: {len(store_meituan_map)} stores loaded')
+    except Exception as e:
+        print(f'Meituan store map load warning: {e}')
+store_meituan_json = json.dumps(store_meituan_map, ensure_ascii=False)
+
 # 当前月绩效进度数据
 perf_data = []
 try:
@@ -174,6 +191,9 @@ try:
         # 只取最新月份数据（绩效按月考核）
         perf_month = max_date.month
         perf_df = df[pd.to_datetime(df['日期']).dt.month == perf_month].copy()
+        # 当月新店/更名店不参与绩效: B093源城(1277352), B092衢州(1252060)
+        NEW_STORE_IDS = {1277352, 1252060}
+        perf_df = perf_df[~perf_df['qn_store_id'].isin(NEW_STORE_IDS)]
         perf_df['qn_sid'] = perf_df['qn_store_id'].apply(lambda x: str(int(float(x))) if pd.notna(x) else '')
         perf_days = perf_df['日期'].nunique()
         mt_stores = dict(zip(duty['牵牛花id'], duty['负责人']))
@@ -705,14 +725,17 @@ function exportTable(tableId, filename) {
     // 检查是否有牵牛花门店ID（data-qn属性）
     const qnRows = table.querySelectorAll('tr[data-qn]');
     if (qnRows.length > 0) {
-        // 有门店ID：手动构建带牵牛花门店ID列的sheet
+        // 有门店ID：手动构建带牵牛花门店ID、美团门店ID列的sheet
         const headers = [];
         table.querySelectorAll('tr:first-child th').forEach(th => headers.push(th.textContent.trim()));
+        headers.unshift('美团门店ID');
         headers.unshift('牵牛花门店ID');
 
         const data = [];
         table.querySelectorAll('tr[data-qn]').forEach(tr => {
-            const row = [tr.getAttribute('data-qn') || ''];
+            const qn = tr.getAttribute('data-qn') || '';
+            const mt = tr.getAttribute('data-meituan') || '';
+            const row = [qn, mt];
             tr.querySelectorAll('td').forEach(td => row.push(td.textContent.trim()));
             data.push(row);
         });
@@ -768,6 +791,7 @@ const shortNames = ''' + short_map_json + ''';
 const searchKeys = ''' + search_map_json + ''';
 const storeRegionMap = ''' + store_region_json + ''';  // 门店→所属地区
 const storeCostMap = ''' + store_cost_json + ''';  // 门店→{cost, qnid}
+const storeMeituanMap = ''' + store_meituan_json + ''';  // 门店→美团渠道门店ID
 const perfData = ''' + perf_json + ''';  // 当前月绩效进度
 
 // 门店名 → 牵牛花门店ID 映射（导出Excel时用）
@@ -856,10 +880,12 @@ function setDateRange(mode) {
             from = yesterday(); to = from;
             break;
         case 'last7':
-            to = yesterday(); from = dFmt(new Date(Date.now()-7*86400000));
+            to = allDates[allDates.length-1];
+            from = dFmt(new Date(dParse(to).getTime()-6*86400000));
             break;
         case 'last30':
-            to = yesterday(); from = dFmt(new Date(Date.now()-30*86400000));
+            to = allDates[allDates.length-1];
+            from = dFmt(new Date(dParse(to).getTime()-29*86400000));
             break;
         case 'lastMonth':
             let d2 = new Date(); d2.setMonth(d2.getMonth()-1);
@@ -1499,6 +1525,7 @@ function renderStore(data) {
             name:short(s.store_name),
             full: s.store_name,
             qn: storeQnMap[s.store_name] || '',
+            mt: storeMeituanMap[s.store_name] || '',
             prov: storeProvince[s.store_name] || '其他',
             ord, rev, gross:rp, comm:cf, net:cp,
             promo, avgProfit,
@@ -1549,7 +1576,7 @@ function renderStore(data) {
     ], function(r,i){
         var marginCls = parseFloat(r.margin)<10?'cell-bad':'';
         var negCls = parseFloat(r.negPct)>35?'cell-bad':'';
-        return '<tr data-qn="'+r.qn+'">'
+        return '<tr data-qn="'+r.qn+'" data-meituan="'+r.mt+'">'
             +'<td>'+(i+1)+'</td>'
             +'<td>'+r.name+'</td>'
             +'<td>'+r.ord.toLocaleString()+'</td>'
