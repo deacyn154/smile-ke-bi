@@ -2254,7 +2254,7 @@ function openModal(kpiType) {
     }, 50);
 }
 
-function barPct(v, t, timePct) { if(!t)return'';let p=v/t*100;if(timePct!==undefined&&p<timePct)return'<td style=\"color:var(--red);font-weight:600\">'+p.toFixed(1)+'%</td>';let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class=\"'+c+'\">'+p.toFixed(1)+'%</td>'; }
+function barPct(v, t, timePct) { if(!t)return'';let p=v/t*100;if(timePct!==undefined){let c=p>=timePct?'progress-bad':'progress-good';return'<td class="'+c+'">'+p.toFixed(1)+'%</td>';}let c=p>=45?'progress-good':p>=30?'progress-warn':'progress-bad';return'<td class="'+c+'">'+p.toFixed(1)+'%</td>'; }
 
 function showPerfModal() {
     if (!perfData || !perfData.data || !perfData.data.length) return;
