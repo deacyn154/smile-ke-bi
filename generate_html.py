@@ -196,15 +196,16 @@ try:
         perf_df = perf_df[~perf_df['qn_store_id'].isin(NEW_STORE_IDS)]
         perf_df['qn_sid'] = perf_df['qn_store_id'].apply(lambda x: str(int(float(x))) if pd.notna(x) else '')
         perf_days = perf_df['日期'].nunique()
-        mt_stores = dict(zip(duty['牵牛花id'], duty['负责人']))
-        for ch, owner in [('美团闪购', None), ('饿了么', '刘再坤'), ('京东到家', '侯龙浩')]:
-            ch_df = perf_df[perf_df['channel']==ch].copy()
-            if ch == '美团闪购':
-                ch_df = ch_df[ch_df['qn_sid'].isin(mt_stores.keys())]
-                ch_df['负责人'] = ch_df['qn_sid'].map(mt_stores)
-            else:
-                ch_df = ch_df[ch_df['qn_sid'] != '1150787']
-                ch_df['负责人'] = owner
+        # Build per-(channel, store) owner map to avoid collision across channels
+        owner_map = {}
+        for _, r in duty.iterrows():
+            owner_map[(str(r['牵牛花id']), str(r['渠道']))] = str(r['负责人'])
+        EXCLUDE_QN_SID = '1150787'
+        for ch in ['美团闪购', '饿了么', '京东到家']:
+            ch_df = perf_df[perf_df['channel'] == ch].copy()
+            ch_df = ch_df[ch_df['qn_sid'] != EXCLUDE_QN_SID]
+            ch_df['负责人'] = ch_df['qn_sid'].apply(lambda x: owner_map.get((x, ch), '未分配'))
+            ch_df = ch_df[ch_df['负责人'] != '未分配']
             grp = ch_df.groupby('负责人').agg(o=('order_cnt','sum'),p=('real_profit','sum')).round(2).reset_index()
             for _, r in grp.iterrows():
                 name = r['负责人']
