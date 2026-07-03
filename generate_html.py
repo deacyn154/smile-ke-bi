@@ -191,8 +191,8 @@ try:
         # 只取最新月份数据（绩效按月考核）
         perf_month = max_date.month
         perf_df = df[pd.to_datetime(df['日期']).dt.month == perf_month].copy()
-        # 当月新店/更名店不参与绩效: B093源城(1277352), B092衢州(1252060)
-        NEW_STORE_IDS = {1277352, 1252060}
+        # 当月新店不参与绩效（7月无新开/更名店，空集合）
+        NEW_STORE_IDS = set()
         perf_df = perf_df[~perf_df['qn_store_id'].isin(NEW_STORE_IDS)]
         perf_df['qn_sid'] = perf_df['qn_store_id'].apply(lambda x: str(int(float(x))) if pd.notna(x) else '')
         perf_days = perf_df['日期'].nunique()
