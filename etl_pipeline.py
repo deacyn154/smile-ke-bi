@@ -587,7 +587,7 @@ daily.loc[offline_mask, 'commission_rate'] = 0
 daily.loc[offline_mask, 'commission_fee'] = 0
 # 客无忧POS 改名为 线下
 daily.loc[daily['channel'] == '客无忧POS', 'channel'] = '线下'
-daily['commission_profit'] = (daily['real_profit'] - daily['commission_fee']).round(2)
+daily['commission_profit'] = (daily['gross_profit'] - daily['commission_fee']).round(2)
 daily['commission_margin'] = np.where(daily['revenue']>0, (daily['commission_profit']/daily['revenue']*100).round(2), 0)
 
 print(f'\n=== Final Daily ===')
