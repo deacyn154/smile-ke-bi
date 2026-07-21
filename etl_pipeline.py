@@ -577,7 +577,7 @@ if fp_files:
 # =============================================
 daily['promo_fee'] = daily.apply(
     lambda r: promo_lookup.get((str(r['日期']), r['store_name'], r['channel']), 0), axis=1)
-daily['real_profit'] = (daily['gross_profit'] - daily['promo_fee'] - daily['commission_fee']).round(2)
+daily['real_profit'] = (daily['gross_profit'] - daily['promo_fee']).round(2)
 daily['real_margin_rate'] = np.where(daily['revenue']>0, (daily['real_profit']/daily['revenue']*100).round(2), 0)
 daily['commission_rate'] = daily['qn_store_id'].map(comm_lookup).fillna(0)
 daily['commission_fee'] = (daily['revenue'] * daily['commission_rate']).round(2)
@@ -587,10 +587,7 @@ daily.loc[offline_mask, 'commission_rate'] = 0
 daily.loc[offline_mask, 'commission_fee'] = 0
 # 客无忧POS 改名为 线下
 daily.loc[daily['channel'] == '客无忧POS', 'channel'] = '线下'
-# 门店毛利 = 线上毛利 - 推广费
-daily['store_profit'] = (daily['gross_profit'] - daily['promo_fee']).round(2)
-# 抽佣毛利 = 门店毛利 - 平台抽佣
-daily['commission_profit'] = (daily['store_profit'] - daily['commission_fee']).round(2)
+daily['commission_profit'] = (daily['real_profit'] - daily['commission_fee']).round(2)
 daily['commission_margin'] = np.where(daily['revenue']>0, (daily['commission_profit']/daily['revenue']*100).round(2), 0)
 
 print(f'\n=== Final Daily ===')
