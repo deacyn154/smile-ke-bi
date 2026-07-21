@@ -71,7 +71,7 @@ def clean(records):
 
 data_records = clean(df.to_dict(orient='records'))
 # 精简字段，减少文件体积
-KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee'}
+KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee','store_profit'}
 data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
 
@@ -289,6 +289,18 @@ if os.path.exists(rawcat_combined_path := os.path.join(WAREHOUSE, 'product', 'ra
     rawcat_combined_records = rawcat_combined_df.to_dict(orient='records')
     rawcat_combined_json = json.dumps(rawcat_combined_records, ensure_ascii=False)
     print(f'Raw cat combined: {len(rawcat_combined_records)} rows loaded')
+
+# =============================================
+# 预渲染静态chip HTML（不依赖JS创建）
+# =============================================
+store_chips_html = ''.join(
+    f'<span class="chip active" data-full="{s}">{short_map.get(s, s)}</span>'
+    for s in stores_full
+)
+channel_chips_html = ''.join(
+    f'<span class="chip active" data-full="{c}">{c}</span>'
+    for c in channels
+)
 
 # =============================================
 # HTML template
@@ -600,7 +612,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
             <div style="flex:1;">
                 <input class="store-search" id="storeSearch" placeholder="搜索门店 / 批量粘贴ID(空格逗号换行分隔)" oninput="filterStores()">
                 <div style="display:none;margin-top:2px;font-size:11px;color:var(--accent);" id="batchSelected"></div>
-                <div class="chip-group" id="storeChips"></div>
+                <div class="chip-group" id="storeChips">''' + store_chips_html + '''</div>
             </div>
             <div class="chip-actions">
                 <button class="chip-action" onclick="selectAll('stores')">全选</button>
@@ -609,7 +621,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
         </div>
         <div class="filter-row">
             <span class="filter-label">📡</span>
-            <div class="chip-group" id="channelChips"></div>
+            <div class="chip-group" id="channelChips">''' + channel_chips_html + '''</div>
             <div class="chip-actions">
                 <button class="chip-action" onclick="selectAll('channels')">全选</button>
                 <button class="chip-action" onclick="deselectAll('channels')">清空</button>
@@ -1089,6 +1101,22 @@ let selectedChannels = [...allChannels];
 
 function createChips(containerId, items, selectedArr, onChange) {
     const container = document.getElementById(containerId);
+    if (!container) return;
+    // 如果chips已经预渲染在HTML里，不重建，只绑定事件
+    const existingChips = container.querySelectorAll('.chip');
+    if (existingChips.length > 0) {
+        existingChips.forEach(chip => {
+            chip.onclick = function() {
+                const item = this.getAttribute('data-full');
+                const idx = selectedArr.indexOf(item);
+                if (idx > -1) { selectedArr.splice(idx,1); this.classList.remove('active'); }
+                else { selectedArr.push(item); this.classList.add('active'); }
+                if (onChange) onChange();
+            };
+        });
+        return;
+    }
+    // Fallback: 如果没有预渲染, 动态创建
     container.innerHTML = '';
     items.forEach(item => {
         const chip = document.createElement('span');
@@ -1125,9 +1153,18 @@ function refreshChips() {
 }
 
 function initFilters() {
-    setDateRange('yesterday');
-    createChips('storeChips', allStoresFull, selectedStores, refresh);
-    createChips('channelChips', allChannels, selectedChannels, refresh);
+    try {
+        setDateRange('last7');
+        console.log('createChips: stores=', allStoresFull.length, 'channels=', allChannels.length);
+        const storeEl = document.getElementById('storeChips');
+        console.log('storeChips element:', storeEl);
+        createChips('storeChips', allStoresFull, selectedStores, refresh);
+        createChips('channelChips', allChannels, selectedChannels, refresh);
+        const chipCount = document.querySelectorAll('#storeChips .chip').length;
+        console.log('storeChips created:', chipCount);
+    } catch(e) {
+        console.error('initFilters error:', e);
+    }
 }
 
 // ============ TAB ============
