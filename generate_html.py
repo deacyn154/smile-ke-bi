@@ -29,7 +29,7 @@ if USE_MYSQL:
     query = """
         SELECT dt AS `日期`, store_name, qn_store_id, channel,
                order_cnt, revenue, real_profit, commission_fee, commission_profit,
-               neg_cnt, delivery_fee, delivery_order_cnt, promo_fee
+               neg_cnt, delivery_fee, delivery_order_cnt, promo_fee, store_profit
         FROM daily_profit
     """
     df = pd.read_sql(query, engine)
@@ -1372,7 +1372,7 @@ function numCls(v, thresholds, goodLow) {
 
 // ============ KPIs with Sparklines ============
 function renderKPIs(data) {
-    const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'real_profit');
+    const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'store_profit');
     const cc=sum(data,'commission_fee'), cp=sum(data,'commission_profit'), nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
     const df2=sum(data,'delivery_fee'), doc=sum(data,'delivery_order_cnt');
     const margin=rev>0?(cp/rev*100).toFixed(1):0;
@@ -1397,7 +1397,7 @@ function renderKPIs(data) {
 
     // 环比
     const prev = getPrevData(data);
-    const pOrd=sum(prev,'order_cnt'), pRev=sum(prev,'revenue'), pGp=sum(prev,'real_profit');
+    const pOrd=sum(prev,'order_cnt'), pRev=sum(prev,'revenue'), pGp=sum(prev,'store_profit');
     const pCc=sum(prev,'commission_fee'), pCp=sum(prev,'commission_profit'), pPf=sum(prev,'promo_fee');
     const pDf=sum(prev,'delivery_fee'), pDoc=sum(prev,'delivery_order_cnt');
     const pNeg=sum(prev,'neg_cnt');
@@ -1484,7 +1484,7 @@ function renderStore(data) {
         if (!prevStoreMap[sn]) prevStoreMap[sn] = {ord:0, rev:0, rp:0, cf:0, cp:0, neg:0, doc:0, df:0, promo:0};
         prevStoreMap[sn].ord += r.order_cnt||0;
         prevStoreMap[sn].rev += r.revenue||0;
-        prevStoreMap[sn].rp += r.real_profit||0;
+        prevStoreMap[sn].rp += r.store_profit||0;
         prevStoreMap[sn].cf += r.commission_fee||0;
         prevStoreMap[sn].cp += r.commission_profit||0;
         prevStoreMap[sn].neg += r.neg_cnt||0;
@@ -1510,7 +1510,7 @@ function renderStore(data) {
     });
 
     const rows=stores.map(s=>{
-        const rev=s.revenue||0, rp=s.real_profit||0, cf=s.commission_fee||0, cp=s.commission_profit||0;
+        const rev=s.revenue||0, sp=s.store_profit||0, rp=s.real_profit||0, cf=s.commission_fee||0, cp=s.commission_profit||0;
         const ord=s.order_cnt||0, aov=ord>0?(rev/ord):0;
         const delCost=(s.delivery_order_cnt||0)>0?(s.delivery_fee/s.delivery_order_cnt):0;
         const margin=rev>0?(cp/rev*100):0;
@@ -1528,13 +1528,13 @@ function renderStore(data) {
             qn: storeQnMap[s.store_name] || '',
             mt: storeMeituanMap[s.store_name] || '',
             prov: storeProvince[s.store_name] || '其他',
-            ord, rev, gross:rp, comm:cf, net:cp,
+            ord, rev, gross:sp, comm:cf, net:cp,
             promo, avgProfit,
             margin, aov, delCost, negPct,
             mom: {
                 ord: momPct(ord, p.ord),
                 rev: momPct(rev, p.rev),
-                gross: momPct(rp, p.rp),
+                gross: momPct(sp, p.rp),
                 comm: momPct(cf, p.cf),
                 net: momPct(cp, p.cp),
                 promo: momPct(promo, p.promo||0),
@@ -1650,7 +1650,7 @@ function renderChannel(data) {
             ord:c.order_cnt||0,
             pct:parseFloat(c.pct)||0,
             rev:rev,
-            gross:rp,
+            gross:sp,
             comm:cf,
             net:cp,
             margin:rev>0?(cp/rev*100):0,
@@ -1773,7 +1773,7 @@ function renderTimeAnalysis(data) {
             date:d.日期,
             ord:d.order_cnt||0,
             rev:rev,
-            gross:rp,
+            gross:sp,
             comm:cf,
             net:cp,
             margin:rev>0?(cp/rev*100):0
@@ -1843,7 +1843,7 @@ function renderNeg(data) {
         ord: d.order_cnt || 0,
         neg: d.neg_cnt || 0,
         np: d.order_cnt > 0 ? ((d.neg_cnt || 0) / d.order_cnt * 100) : 0,
-        gross: d.gross_profit || 0,
+        gross: (d.store_profit || 0),
         net: d.commission_profit || 0
     }));
     makeSortable('negTable', negRows, [
