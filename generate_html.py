@@ -70,6 +70,14 @@ def clean(records):
     return out
 
 data_records = clean(df.to_dict(orient='records'))
+
+# 统一门店名括号: 全→中文括号（避免同店出现两次）
+def std_store(s):
+    if not isinstance(s, str): return s
+    return s.replace('(', '（').replace(')', '）')
+for r in data_records:
+    if 'store_name' in r: r['store_name'] = std_store(r['store_name'])
+
 # 精简字段，减少文件体积
 KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee','store_profit'}
 data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
