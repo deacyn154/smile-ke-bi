@@ -206,7 +206,7 @@ try:
             ch_df = ch_df[ch_df['qn_sid'] != EXCLUDE_QN_SID]
             ch_df['负责人'] = ch_df['qn_sid'].apply(lambda x: owner_map.get((x, ch), '未分配'))
             ch_df = ch_df[ch_df['负责人'] != '未分配']
-            grp = ch_df.groupby('负责人').agg(o=('order_cnt','sum'),p=('real_profit','sum')).round(2).reset_index()
+            grp = ch_df.groupby('负责人').agg(o=('order_cnt','sum'),p=('store_profit','sum')).round(2).reset_index()
             for _, r in grp.iterrows():
                 name = r['负责人']
                 t = target_map.get(name, {})
