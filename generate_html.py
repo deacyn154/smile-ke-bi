@@ -29,7 +29,7 @@ if USE_MYSQL:
     query = """
         SELECT dt AS `日期`, store_name, qn_store_id, channel,
                order_cnt, revenue, real_profit, commission_fee, commission_profit,
-               neg_cnt, delivery_fee, delivery_order_cnt, promo_fee
+               neg_cnt, delivery_fee, delivery_order_cnt, promo_fee, store_profit
         FROM daily_profit
     """
     df = pd.read_sql(query, engine)
@@ -206,7 +206,7 @@ try:
             ch_df = ch_df[ch_df['qn_sid'] != EXCLUDE_QN_SID]
             ch_df['负责人'] = ch_df['qn_sid'].apply(lambda x: owner_map.get((x, ch), '未分配'))
             ch_df = ch_df[ch_df['负责人'] != '未分配']
-            grp = ch_df.groupby('负责人').agg(o=('order_cnt','sum'),p=('real_profit','sum')).round(2).reset_index()
+            grp = ch_df.groupby('负责人').agg(o=('order_cnt','sum'),p=('store_profit','sum')).round(2).reset_index()
             for _, r in grp.iterrows():
                 name = r['负责人']
                 t = target_map.get(name, {})
@@ -1372,7 +1372,7 @@ function numCls(v, thresholds, goodLow) {
 
 // ============ KPIs with Sparklines ============
 function renderKPIs(data) {
-    const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'real_profit');
+    const ord=sum(data,'order_cnt'), rev=sum(data,'revenue'), gp=sum(data,'store_profit');
     const cc=sum(data,'commission_fee'), cp=sum(data,'commission_profit'), nc=sum(data,'neg_cnt'), pf=sum(data,'promo_fee');
     const df2=sum(data,'delivery_fee'), doc=sum(data,'delivery_order_cnt');
     const margin=rev>0?(cp/rev*100).toFixed(1):0;
@@ -1397,7 +1397,7 @@ function renderKPIs(data) {
 
     // 环比
     const prev = getPrevData(data);
-    const pOrd=sum(prev,'order_cnt'), pRev=sum(prev,'revenue'), pGp=sum(prev,'real_profit');
+    const pOrd=sum(prev,'order_cnt'), pRev=sum(prev,'revenue'), pGp=sum(prev,'store_profit');
     const pCc=sum(prev,'commission_fee'), pCp=sum(prev,'commission_profit'), pPf=sum(prev,'promo_fee');
     const pDf=sum(prev,'delivery_fee'), pDoc=sum(prev,'delivery_order_cnt');
     const pNeg=sum(prev,'neg_cnt');
@@ -2173,8 +2173,8 @@ function openModal(kpiType) {
             chartData = stores.map(s=>({n:short(s.store_name), v:(s.revenue/(s.order_cnt||1))}));
             break;
         case 'store_profit':
-            stores.sort((a,b)=>b.real_profit-a.real_profit);
-            chartTitle='门店毛利'; vKey='real_profit'; color='#5AD8A6'; vLabel='元';
+            stores.sort((a,b)=>b.store_profit-a.store_profit);
+            chartTitle='门店毛利'; vKey='store_profit'; color='#5AD8A6'; vLabel='元';
             break;
         case 'comm_profit':
             stores.sort((a,b)=>b.commission_profit-a.commission_profit);
