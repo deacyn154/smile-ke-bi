@@ -1102,36 +1102,40 @@ let selectedChannels = [...allChannels];
 function createChips(containerId, items, selectedArr, onChange) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    // 如果chips已经预渲染在HTML里，不重建，只绑定事件
-    const existingChips = container.querySelectorAll('.chip');
-    if (existingChips.length > 0) {
-        existingChips.forEach(chip => {
-            chip.onclick = function() {
-                const item = this.getAttribute('data-full');
-                const idx = selectedArr.indexOf(item);
-                if (idx > -1) { selectedArr.splice(idx,1); this.classList.remove('active'); }
-                else { selectedArr.push(item); this.classList.add('active'); }
-                if (onChange) onChange();
-            };
-        });
-        return;
-    }
-    // Fallback: 如果没有预渲染, 动态创建
-    container.innerHTML = '';
-    items.forEach(item => {
-        const chip = document.createElement('span');
-        chip.className = 'chip active';
-        chip.setAttribute('data-full', item);
-        chip.textContent = short(item);
-        chip.onclick = function() {
-            const idx = selectedArr.indexOf(item);
-            if (idx > -1) { selectedArr.splice(idx,1); this.classList.remove('active'); }
-            else { selectedArr.push(item); this.classList.add('active'); }
-            if (onChange) onChange();
-        };
-        container.appendChild(chip);
+    // chips已预渲染，只同步激活状态
+    container.querySelectorAll('.chip').forEach(chip => {
+        const item = chip.getAttribute('data-full');
+        chip.classList.toggle('active', selectedArr.indexOf(item) > -1);
     });
+    // 同步：如果全部被selected, 确保都显示active
+    if (container.querySelectorAll('.chip.active').length === 0 && selectedArr.length > 0) {
+        container.querySelectorAll('.chip').forEach(chip => {
+            const item = chip.getAttribute('data-full');
+            chip.classList.toggle('active', selectedArr.indexOf(item) > -1);
+        });
+    }
 }
+
+// 全局chip点击事件委派
+document.addEventListener('click', function(e) {
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    const container = chip.parentElement;
+    if (!container) return;
+    
+    if (container.id === 'storeChips') {
+        const item = chip.getAttribute('data-full');
+        const idx = selectedStores.indexOf(item);
+        if (idx > -1) { selectedStores.splice(idx,1); chip.classList.remove('active'); }
+        else { selectedStores.push(item); chip.classList.add('active'); }
+    } else if (container.id === 'channelChips') {
+        const item = chip.getAttribute('data-full');
+        const idx = selectedChannels.indexOf(item);
+        if (idx > -1) { selectedChannels.splice(idx,1); chip.classList.remove('active'); }
+        else { selectedChannels.push(item); chip.classList.add('active'); }
+    }
+    refresh();
+});
 
 function selectAll(type) {
     if (type==='stores') { selectedStores.splice(0, selectedStores.length, ...allStoresFull); }
@@ -1153,18 +1157,9 @@ function refreshChips() {
 }
 
 function initFilters() {
-    try {
-        setDateRange('last7');
-        console.log('createChips: stores=', allStoresFull.length, 'channels=', allChannels.length);
-        const storeEl = document.getElementById('storeChips');
-        console.log('storeChips element:', storeEl);
-        createChips('storeChips', allStoresFull, selectedStores, refresh);
-        createChips('channelChips', allChannels, selectedChannels, refresh);
-        const chipCount = document.querySelectorAll('#storeChips .chip').length;
-        console.log('storeChips created:', chipCount);
-    } catch(e) {
-        console.error('initFilters error:', e);
-    }
+    setDateRange('last7');
+    createChips('storeChips', allStoresFull, selectedStores, refresh);
+    createChips('channelChips', allChannels, selectedChannels, refresh);
 }
 
 // ============ TAB ============
