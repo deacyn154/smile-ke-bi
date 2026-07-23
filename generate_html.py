@@ -69,19 +69,30 @@ def clean(records):
         out.append(row)
     return out
 
-data_records = clean(df.to_dict(orient='records'))
+# 数据压缩: 数组格式 (无key名), 大幅减小体积
+ch_index = {'美团闪购':0, '饿了么':1, '京东到家':2, '线下':3}
+raw = df[['日期','qn_store_id','channel','order_cnt','revenue','store_profit',
+           'commission_profit','neg_cnt','delivery_fee','delivery_order_cnt']]
+data_compact = []
+for _, r in raw.iterrows():
+    qid = int(r['qn_store_id']) if pd.notna(r['qn_store_id']) else 0
+    d = str(r['日期'])[:10].replace('-','')
+    data_compact.append([
+        d, qid,
+        ch_index.get(r['channel'], 3),
+        int(r['order_cnt'] or 0),
+        round(float(r['revenue'] or 0)),
+        round(float(r['store_profit'] or 0)),
+        round(float(r['commission_profit'] or 0)),
+        int(r['neg_cnt'] or 0),
+        round(float(r['delivery_fee'] or 0)),
+        int(r['delivery_order_cnt'] or 0),
+    ])
+data_json = json.dumps(data_compact, ensure_ascii=False)
 
-# 统一门店名括号: 全→中文括号（避免同店出现两次）
-def std_store(s):
-    if not isinstance(s, str): return s
-    return s.replace('(', '（').replace(')', '）')
-for r in data_records:
-    if 'store_name' in r: r['store_name'] = std_store(r['store_name'])
-
-# 精简字段，减少文件体积
-KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee','store_profit'}
-data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
+# promo 保持原样（小数据）
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
+promo_json = json.dumps(promo_records, ensure_ascii=False)
 
 # 加载 channel_store_mapping (后续门店标准化需要)
 mapping_path = os.path.join(BASE, 'channel_store_mapping.xlsx')
@@ -92,26 +103,23 @@ if os.path.exists(mapping_path):
 else:
     mapping = pd.DataFrame(columns=['qn_store_id','qn_store_name','channel','channel_store_id'])
 
-# =============================================
 # 门店标准化: 以 qn_store_id 为唯一键, 名称只来自 mapping
-# =============================================
-store_id_to_name = {}  # qn_store_id -> canonical name
+store_id_to_name = {}
 for _, r in mapping.iterrows():
     qid = str(int(r['qn_store_id']))
     name = r['qn_store_name']
     if qid not in store_id_to_name:
-        store_id_to_name[qid] = name  # 取第一条, 即 mapping 里的标准名
+        store_id_to_name[qid] = name
 
-# 数据记录: store_name 替换为 qn_store_id 对应的标准名
-for r in data_records:
-    qid = str(r.get('qn_store_id', '')).strip()
-    if qid in store_id_to_name:
-        r['store_name'] = store_id_to_name[qid]
+# promo 门店名替换
 for r in promo_records:
-    qid = str(r.get('qn_store_id', '')).str.split() if False else None
     qid = str(r.get('qn_store_id', '')).strip() if r.get('qn_store_id') is not None else ''
     if qid in store_id_to_name:
         r['store_name'] = store_id_to_name[qid]
+
+# allStoresFull: 从 df 中提取(去重 qn_store_id)
+all_store_ids = sorted(set(int(r['qn_store_id']) for _, r in df.iterrows() if pd.notna(r['qn_store_id'])))
+stores_full = [str(qid) for qid in all_store_ids]
 
 # --- Short store name extraction ---
 def short_name(full):
@@ -119,7 +127,7 @@ def short_name(full):
     return m.group(1) if m else full
 
 # allStoresFull: 用 qn_store_id 列表(去重)
-all_store_ids = sorted(set(r.get('qn_store_id') for r in data_records if r.get('qn_store_id')))
+all_store_ids = sorted(set(int(r['qn_store_id']) for _, r in df.iterrows() if pd.notna(r['qn_store_id'])))
 stores_full = [str(int(qid)) for qid in all_store_ids]
 store_name_map = {qid: store_id_to_name.get(qid, f'门店{qid}') for qid in stores_full}
 short_map = {qid: short_name(name) for qid, name in store_name_map.items()}
@@ -259,8 +267,6 @@ dates_all = sorted(df['日期'].unique().tolist())
 
 short_map_json = json.dumps(short_map, ensure_ascii=False)
 
-data_json = json.dumps(data_records, ensure_ascii=False)
-promo_json = json.dumps(promo_records, ensure_ascii=False)
 channels_json = json.dumps(channels, ensure_ascii=False)
 dates_json = json.dumps(dates_all, ensure_ascii=False)
 
@@ -813,7 +819,26 @@ function exportStoreCat() {
 
 
 // ============ DATA ============
-const rawData = ''' + data_json + ''';
+const rawCompact = ''' + data_json + ''';  // compact: [date, qn_id, ch_idx, o, r, sp, cp, neg, df, doc]
+// 解码为完整对象
+const chNames = ['美团闪购','饿了么','京东到家','线下'];
+const rawData = rawCompact.map(r => ({
+    '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
+    'store_name': storeNameMap[String(r[1])] || String(r[1]),
+    'qn_store_id': r[1],
+    'channel': chNames[r[2]],
+    'order_cnt': r[3],
+    'revenue': r[4] || 0,
+    'store_profit': r[5] || 0,
+    'commission_profit': r[6] || 0,
+    'neg_cnt': r[7] || 0,
+    'delivery_fee': r[8] || 0,
+    'delivery_order_cnt': r[9] || 0,
+    'real_profit': r[6] || 0,
+    'commission_fee': (r[4]||0) - (r[6]||0),
+    'promo_fee': ((r[4]||0) - (r[5]||0)) + ((r[4]||0) - (r[6]||0)),
+}));
+rawData.sort((a,b) => (a['日期']+a['store_name']+a['channel']).localeCompare(b['日期']+b['store_name']+b['channel']));
 const promoData = ''' + promo_json + ''';
 const productData = ''' + product_json + ''';
 const allProductData = ''' + all_product_json + ''';
@@ -2522,4 +2547,4 @@ with open(INDEX_OUT, 'w', encoding='utf-8') as f:
 print(f'Generated: {OUTPUT}')
 print(f'Synced  : {INDEX_OUT}')
 print(f'Size: {os.path.getsize(OUTPUT) / 1024:.0f} KB')
-print(f'Data: {len(data_records)} rows, {len(dates_all)} days, {len(stores_full)} stores')
+print(f'Data: {len(df)} rows, {len(dates_all)} days, {len(stores_full)} stores')
