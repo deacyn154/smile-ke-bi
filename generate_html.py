@@ -6,7 +6,7 @@ Generate self-contained HTML BI dashboard v3:
   - Store search + chips (short names)
 """
 import pandas as pd
-import json, os, re, calendar
+import json, os, re, calendar, glob
 from sqlalchemy import create_engine, text
 
 BASE = r'E:\Desktop\工作文件（月度）\claw制作BI'
@@ -44,6 +44,61 @@ else:
     if os.path.exists(promo_path):
         promo = pd.read_excel(promo_path)
         promo['日期'] = pd.to_datetime(promo['日期']).dt.strftime('%Y-%m-%d')
+
+# 合并饿了么 + 美团 推广明细 (daily_promo 通常只含部分历史, 不全)
+mapping = pd.read_excel(os.path.join(BASE, 'channel_store_mapping.xlsx'))
+mt_to_qn = {(row['channel'], str(row['channel_store_id'])): str(int(row['qn_store_id']))
+            for _, row in mapping.iterrows()}
+
+for month_dir in sorted(glob.glob(os.path.join(BASE, '数据表', '2026*'))):
+    month = os.path.basename(month_dir)
+    # 饿了么推广
+    elm_path = os.path.join(month_dir, f'饿了么推广_{month}.xlsx')
+    if os.path.exists(elm_path):
+        try:
+            elm = pd.read_excel(elm_path)
+            elm['日期'] = pd.to_datetime(elm['日期'], errors='coerce').dt.strftime('%Y-%m-%d')
+            # 找门店ID列(各种叫法) 和 qn_store_id 的映射
+            id_col = '门店ID' if '门店ID' in elm.columns else elm.columns[3]
+            elm['qn_store_id'] = elm[id_col].astype(str).str.strip().apply(
+                lambda x: mt_to_qn.get(('饿了么', x), ''))
+            elm['channel'] = '饿了么'
+            elm['promo_fee'] = pd.to_numeric(elm['推广现金消费(元)'], errors='coerce').fillna(0).abs()
+            # 取门店名
+            name_map = df.dropna(subset=['store_name']).set_index('qn_store_id')['store_name'].to_dict()
+            elm['store_name'] = elm['qn_store_id'].apply(
+                lambda x: name_map.get(int(x), '') if x.isdigit() else '')
+            add = elm[['日期','store_name','qn_store_id','channel','promo_fee']].copy()
+            add = add[add['qn_store_id'] != '']
+            if promo is None: promo = add
+            else: promo = pd.concat([promo, add], ignore_index=True)
+        except Exception as e:
+            print(f'饿了么推广跳过: {e}')
+
+    # 美团推广 T+1 结算
+    mt_path = os.path.join(month_dir, f'美团推广_{month}.xlsx')
+    if os.path.exists(mt_path):
+        try:
+            mt_raw = pd.read_excel(mt_path, sheet_name='推广费流水', header=None)
+        except: continue
+        mt = mt_raw.iloc[1:].copy()
+        mt.columns = ['门店id','时间','交易类型','扣款','返款','状态','订单号']
+        mt['时间'] = pd.to_datetime(mt['时间'], errors='coerce').dt.date
+        mt['扣款'] = pd.to_numeric(mt['扣款'], errors='coerce').fillna(0)
+        mt = mt[mt['交易类型']=='推广订单扣款']
+        if len(mt) == 0: continue
+        mt['日期'] = (pd.to_datetime(mt['时间']) - pd.Timedelta(days=1)).dt.strftime('%Y-%m-%d')
+        mt['qn_store_id'] = mt['门店id'].astype(str).str.strip().apply(
+            lambda x: mt_to_qn.get(('美团闪购', x), ''))
+        mt['channel'] = '美团闪购'
+        mt['promo_fee'] = mt['扣款'].abs()
+        name_map = df.dropna(subset=['store_name']).set_index('qn_store_id')['store_name'].to_dict()
+        mt['store_name'] = mt['qn_store_id'].apply(
+            lambda x: name_map.get(int(x), '') if x.isdigit() else '')
+        add = mt[['日期','store_name','qn_store_id','channel','promo_fee']].copy()
+        add = add[add['qn_store_id'] != '']
+        if promo is None: promo = add
+        else: promo = pd.concat([promo, add], ignore_index=True)
 
 # 仪表盘只取最近365天
 df['_date_sort'] = pd.to_datetime(df['日期'])
