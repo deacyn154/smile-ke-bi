@@ -883,7 +883,12 @@ async function loadData() {
         'commission_fee': (r[4]||0) - (r[6]||0),
         'promo_fee': Math.max((r[4]||0) - (r[5]||0), 0),
     }));
-    rawData.sort((a,b) => (a['日期']+a['store_name']+a['channel']).localeCompare(b['日期']+b['store_name']+b['channel']));
+    // 快速排序: 用 < > 直接比较, 不走 localeCompare (localeCompare 在12k+条上会卡)
+    rawData.sort((a,b) => {
+        if (a['日期'] !== b['日期']) return a['日期'] < b['日期'] ? -1 : 1;
+        if (a['qn_store_id'] !== b['qn_store_id']) return a['qn_store_id'] - b['qn_store_id'];
+        return a['channel'] < b['channel'] ? -1 : a['channel'] > b['channel'] ? 1 : 0;
+    });
     updateProgress('✅ 数据就绪');
     // 延迟一下让进度条到100%
     setTimeout(() => {
@@ -1546,7 +1551,7 @@ function renderKPIs(data) {
 
     // Get daily data for sparklines
     const byDate=groupBy(data,['日期']);
-    byDate.sort((a,b)=>a.日期.localeCompare(b.日期));
+    byDate.sort((a,b)=>a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
     const spkOrd=byDate.map(d=>d.order_cnt||0);
     const spkRev=byDate.map(d=>d.revenue||0);
     const spkGp=byDate.map(d=>d.real_profit||0);
@@ -1882,7 +1887,7 @@ function renderPromo(pd) {
 // ============ TIME ANALYSIS TAB ============
 function renderTimeAnalysis(data) {
     const byDate = groupBy(data, ['日期']);
-    byDate.sort((a,b) => a.日期.localeCompare(b.日期));
+    byDate.sort((a,b) => a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
     const dates = byDate.map(d => d.日期);
     const orders = byDate.map(d => d.order_cnt || 0);
     const profits = byDate.map(d => d.commission_profit || 0);
@@ -1958,7 +1963,7 @@ function renderTimeAnalysis(data) {
 // ============ NEG TAB ============
 function renderNeg(data) {
     const byDate = groupBy(data, ['日期']);
-    byDate.sort((a, b) => a.日期.localeCompare(b.日期));
+    byDate.sort((a, b) => a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
     const dates = byDate.map(d => d.日期);
     const negPcts = byDate.map(d => d.order_cnt > 0 ? ((d.neg_cnt || 0) / d.order_cnt * 100) : 0);
     const maxP = Math.max(...negPcts, 1);
@@ -2027,7 +2032,7 @@ function renderNeg(data) {
 // ============ DELIVERY TAB ============
 function renderDelivery(data) {
     const byDate = groupBy(data, ['日期']);
-    byDate.sort((a, b) => a.日期.localeCompare(b.日期));
+    byDate.sort((a, b) => a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
     const dates = byDate.map(d => d.日期);
     const avgCosts = byDate.map(d => d.delivery_order_cnt > 0 ? (d.delivery_fee / d.delivery_order_cnt) : 0);
     const maxC = Math.max(...avgCosts, 1);
