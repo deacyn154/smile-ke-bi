@@ -135,6 +135,9 @@ all_store_ids = sorted(set(int(r['qn_store_id']) for _, r in df.iterrows() if pd
 stores_full = [str(int(qid)) for qid in all_store_ids]
 store_name_map = {qid: store_id_to_name.get(qid, f'门店{qid}') for qid in stores_full}
 short_map = {qid: short_name(name) for qid, name in store_name_map.items()}
+# 同时支持完整名查询 (charts里 s.store_name 是完整名)
+for qid, name in store_name_map.items():
+    short_map[name] = short_name(name)
 search_map = {}
 for qid in stores_full:
     name = store_name_map[qid]
@@ -612,8 +615,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
         </div>
     </div>
     <div class="page-nav" style="display:flex;gap:0;margin-bottom:16px;">
-        <button class="page-btn active" onclick="switchPage('ops',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px 0 0 8px;cursor:pointer;font-size:14px;">运营数据</button>
-        <button class="page-btn" onclick="switchPage('product',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);border-radius:0 8px 8px 0;cursor:pointer;font-size:14px;border-left:none;">商品运营</button>
+        <button class="page-btn active" onclick="switchPage('ops',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px;cursor:pointer;font-size:14px;">运营数据</button>
     </div>
     <div id="page-ops">
 
@@ -854,7 +856,7 @@ async function loadData() {
         'delivery_order_cnt': r[9] || 0,
         'real_profit': r[6] || 0,
         'commission_fee': (r[4]||0) - (r[6]||0),
-        'promo_fee': ((r[4]||0) - (r[5]||0)) + ((r[4]||0) - (r[6]||0)),
+        'promo_fee': Math.max((r[4]||0) - (r[5]||0), 0),
     }));
     rawData.sort((a,b) => (a['日期']+a['store_name']+a['channel']).localeCompare(b['日期']+b['store_name']+b['channel']));
     document.getElementById('loadingMsg').style.display = 'none';
@@ -1240,12 +1242,18 @@ function switchTab(name, btn) {
     document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-'+name).classList.add('active');
-    // Force Plotly charts to fill container after tab switch
-    setTimeout(() => {
-        document.querySelectorAll('#tab-'+name+' .js-plotly-plot').forEach(el => {
-            if (el._fullLayout) Plotly.Plots.resize(el);
-        });
-    }, 50);
+    // 重画当前tab的charts (refresh仅画active的)
+    setTimeout(() => refreshTabCharts(name), 50);
+}
+
+// 按tab重画charts
+function refreshTabCharts(name) {
+    const data = getFiltered();
+    if (name === 'channel') renderChannel(data);
+    else if (name === 'time') renderTimeAnalysis(data);
+    else if (name === 'neg') renderNeg(data);
+    else if (name === 'delivery') renderDelivery(data);
+    else if (name === 'store') renderStore(data);
 }
 
 // ============ HELPERS ============
@@ -1432,15 +1440,32 @@ function makeSortable(tableId, data, colDefs, formatRowFn) {
     tableSortState[tableId]=state;
 
     if(state.col>=0&&state.col<colDefs.length) {
-        const cdef=colDefs[state.col];
-        data.sort((a,b)=>{
-            let va=a[cdef.key]||0, vb=b[cdef.key]||0;
-            if(cdef.type==='num'||cdef.type==='pct') { va=Number(va); vb=Number(vb); }
-            else { va=String(va); vb=String(vb); }
-            if(va<vb) return state.asc?-1:1;
-            if(va>vb) return state.asc?1:-1;
-            return 0;
-        });
+        // 环比列: 沿用state.col的mom key排序 (而非colDefs[colIdx])
+        const useMom = (tableId==='storeTable' && state.col===13);
+        if (useMom) {
+            // 从 state.momLastCol 取上次真实排序的列, 默认用 net
+            const lastCol = state.momLastCol != null ? state.momLastCol : 6;
+            const cdef = colDefs[lastCol];
+            data.sort((a,b)=>{
+                const va = a.mom?.[cdef.key] ?? 0;
+                const vb = b.mom?.[cdef.key] ?? 0;
+                if(va<vb) return state.asc?-1:1;
+                if(va>vb) return state.asc?1:-1;
+                return 0;
+            });
+        } else {
+            // 记录最近一次真实排序列, 用于环比排序
+            state.momLastCol = state.col;
+            const cdef=colDefs[state.col];
+            data.sort((a,b)=>{
+                let va=a[cdef.key]||0, vb=b[cdef.key]||0;
+                if(cdef.type==='num'||cdef.type==='pct') { va=Number(va); vb=Number(vb); }
+                else { va=String(va); vb=String(vb); }
+                if(va<vb) return state.asc?-1:1;
+                if(va>vb) return state.asc?1:-1;
+                return 0;
+            });
+        }
     }
 
     data.forEach((r,i)=>{ h+=formatRowFn(r,i); });
@@ -1455,8 +1480,13 @@ function makeSortable(tableId, data, colDefs, formatRowFn) {
 }
 function sortAndRender(tableId, colIdx, type) {
     const state=tableSortState[tableId]||{col:-1,asc:true};
-    if(state.col===colIdx) state.asc=!state.asc;
+    // 环比列(storeTable col 13): 切换升降序, state.col=13 表示按环比排
+    if (tableId==='storeTable' && colIdx===13) {
+        state.asc = !(state.asc);
+        state.col = 13;
+    } else if(state.col===colIdx) state.asc=!state.asc;
     else { state.col=colIdx; state.asc=true; }
+    tableSortState[tableId]=state;
     refresh();
 }
 
