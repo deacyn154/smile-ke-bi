@@ -353,7 +353,6 @@ html = '''<!DOCTYPE html>
 <title>微笑客经营看板</title>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.32.0/plotly.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-<script src="data.js"></script>
 <style>
 :root {
     --bg: #f5f6f8; --card: #ffffff; --border: #e5e7eb;
@@ -830,74 +829,33 @@ function exportStoreCat() {
 }
 
 
-// ============ DATA ============
-const DATA_URL = "./data.json";
-let rawCompact = [];
+// ============ DATA: 直接嵌入，无异步加载 ============
+const rawCompact = ''' + data_json + ''';
 const chNames = ['美团闪购','饿了么','京东到家','线下'];
-let rawData = [];
-
-// 加载数据: 优先用 <script> 注入的 window.DASHBOARD_DATA (本地 file:// 也能用), 否则 fetch
-async function loadData() {
-    const ld = document.getElementById('loadingMsg');
-    if (!ld) return;
-
-    // 进度更新
-    const progressSteps = ['📥 加载数据文件...', '🔍 解析记录中...', '📊 汇总指标中...'];
-    let step = 0;
-    function updateProgress(msg) {
-        const pct = Math.min(Math.round((step / progressSteps.length) * 100), 95);
-        ld.innerHTML = '<div style="max-width:300px;margin:0 auto;"><div style="background:#e5e7eb;border-radius:8px;height:12px;overflow:hidden;margin-bottom:8px;"><div style="background:var(--accent,#4f6ef7);height:100%;width:'+pct+'%;transition:width .3s;border-radius:8px;"></div></div><div style="color:#6b7280;font-size:13px;">'+(msg||progressSteps[step]||'')+'</div></div>';
-        step++;
-    }
-
-    // 1) 尝试 script 标签注入
-    updateProgress();
-    if (window.DASHBOARD_DATA) {
-        rawCompact = window.DASHBOARD_DATA;
-    } else {
-        // 2) fetch (需要 http:// 协议, file:// 会 CORS 失败)
-        try {
-            const resp = await fetch(DATA_URL, {cache: "no-cache"});
-            if (!resp.ok) throw new Error("fetch failed");
-            rawCompact = await resp.json();
-        } catch(e) {
-            console.warn("Data fetch failed");
-            rawCompact = [];
-        }
-    }
-    updateProgress();
-    // 解码
-    rawData = rawCompact.map(r => ({
-        '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-        'store_name': storeNameMap[String(r[1])] || String(r[1]),
-        'qn_store_id': r[1],
-        'channel': chNames[r[2]],
-        'order_cnt': r[3],
-        'revenue': r[4] || 0,
-        'store_profit': r[5] || 0,
-        'commission_profit': r[6] || 0,
-        'neg_cnt': r[7] || 0,
-        'delivery_fee': r[8] || 0,
-        'delivery_order_cnt': r[9] || 0,
-        'real_profit': r[6] || 0,
-        'commission_fee': (r[4]||0) - (r[6]||0),
-        'promo_fee': Math.max((r[4]||0) - (r[5]||0), 0),
-    }));
-    // 快速排序: 用 < > 直接比较, 不走 localeCompare (localeCompare 在12k+条上会卡)
-    rawData.sort((a,b) => {
-        if (a['日期'] !== b['日期']) return a['日期'] < b['日期'] ? -1 : 1;
-        if (a['qn_store_id'] !== b['qn_store_id']) return a['qn_store_id'] - b['qn_store_id'];
-        return a['channel'] < b['channel'] ? -1 : a['channel'] > b['channel'] ? 1 : 0;
-    });
-    updateProgress('✅ 数据就绪');
-    // 延迟一下让进度条到100%
-    setTimeout(() => {
-        document.getElementById('loadingMsg').style.display = 'none';
-        initDashboard();
-    }, 200);
-}
-// 页面加载时调用
-loadData();
+// 同步解码
+let rawData = rawCompact.map(r => ({
+    '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
+    'store_name': storeNameMap[String(r[1])] || String(r[1]),
+    'qn_store_id': r[1],
+    'channel': chNames[r[2]],
+    'order_cnt': r[3],
+    'revenue': r[4] || 0,
+    'store_profit': r[5] || 0,
+    'commission_profit': r[6] || 0,
+    'neg_cnt': r[7] || 0,
+    'delivery_fee': r[8] || 0,
+    'delivery_order_cnt': r[9] || 0,
+    'real_profit': r[6] || 0,
+    'commission_fee': (r[4]||0) - (r[6]||0),
+    'promo_fee': Math.max((r[4]||0) - (r[5]||0), 0),
+}));
+rawData.sort((a,b) => {
+    if (a['日期'] !== b['日期']) return a['日期'] < b['日期'] ? -1 : 1;
+    if (a['qn_store_id'] !== b['qn_store_id']) return a['qn_store_id'] - b['qn_store_id'];
+    return a['channel'] < b['channel'] ? -1 : a['channel'] > b['channel'] ? 1 : 0;
+});
+document.getElementById('loadingMsg').style.display = 'none';
+initDashboard();
 const promoData = ''' + promo_json + ''';
 const productData = ''' + product_json + ''';
 const allProductData = ''' + all_product_json + ''';
@@ -951,7 +909,7 @@ const storeProvince = {};
         if (pa>=0 && pb<0) return -1;
         if (pa<0 && pb>=0) return 1;
         if (pa>=0 && pb>=0 && pa!==pb) return pa-pb;
-        return a.localeCompare(b);
+        return a < b ? -1 : a > b ? 1 : 0;
     });
 })();
 
@@ -1674,7 +1632,7 @@ function renderStore(data) {
             const po = ['广东省','湖南省','广西壮族自治区','福建省','江西省','海南省','湖北省','其他'];
             return po.indexOf(pa) - po.indexOf(pb);
         }
-        return (a.store_name||'').localeCompare(b.store_name||'');
+        return (a.store_name||'') < (b.store_name||'') ? -1 : (a.store_name||'') > (b.store_name||'') ? 1 : 0;
     });
 
     const rows=stores.map(s=>{
