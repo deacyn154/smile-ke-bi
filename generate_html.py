@@ -83,39 +83,55 @@ KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenu
 data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
 
-# 合并门店：江门乐购一刻 / 恩平中澳豪庭 统一到江门店
-STORE_MERGE = {
-    'B020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
-    'D020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
-    'D020-乐购一刻（恩平中澳豪庭店）': '乐购一刻（江门店）',
-    'B085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
-    'D085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
-    'B061-微笑客（东莞惠众百货）': '东莞惠众百货',
-    'D061-微笑客（东莞惠众百货）': '东莞惠众百货',
-    'D061-惠众百货（东莞寮步店）': '东莞惠众百货',
-}
+# 加载 channel_store_mapping (后续门店标准化需要)
+mapping_path = os.path.join(BASE, 'channel_store_mapping.xlsx')
+if os.path.exists(mapping_path):
+    mapping = pd.read_excel(mapping_path)
+    mapping['channel_store_id'] = mapping['channel_store_id'].astype(str)
+    mapping['qn_store_id'] = pd.to_numeric(mapping['qn_store_id'], errors='coerce').fillna(0).astype(int)
+else:
+    mapping = pd.DataFrame(columns=['qn_store_id','qn_store_name','channel','channel_store_id'])
+
+# =============================================
+# 门店标准化: 以 qn_store_id 为唯一键, 名称只来自 mapping
+# =============================================
+store_id_to_name = {}  # qn_store_id -> canonical name
+for _, r in mapping.iterrows():
+    qid = str(int(r['qn_store_id']))
+    name = r['qn_store_name']
+    if qid not in store_id_to_name:
+        store_id_to_name[qid] = name  # 取第一条, 即 mapping 里的标准名
+
+# 数据记录: store_name 替换为 qn_store_id 对应的标准名
 for r in data_records:
-    sn = r.get('store_name', '')
-    if sn in STORE_MERGE:
-        r['store_name'] = STORE_MERGE[sn]
+    qid = str(r.get('qn_store_id', '')).strip()
+    if qid in store_id_to_name:
+        r['store_name'] = store_id_to_name[qid]
 for r in promo_records:
-    sn = r.get('store_name', '')
-    if sn in STORE_MERGE:
-        r['store_name'] = STORE_MERGE[sn]
+    qid = str(r.get('qn_store_id', '')).str.split() if False else None
+    qid = str(r.get('qn_store_id', '')).strip() if r.get('qn_store_id') is not None else ''
+    if qid in store_id_to_name:
+        r['store_name'] = store_id_to_name[qid]
 
 # --- Short store name extraction ---
 def short_name(full):
     m = re.search(r'[（(]([^）)]+)[）)]', full)
     return m.group(1) if m else full
 
-stores_full = sorted(set(r['store_name'] for r in data_records))
-short_map = {}
+# allStoresFull: 用 qn_store_id 列表(去重)
+all_store_ids = sorted(set(r.get('qn_store_id') for r in data_records if r.get('qn_store_id')))
+stores_full = [str(int(qid)) for qid in all_store_ids]
+store_name_map = {qid: store_id_to_name.get(qid, f'门店{qid}') for qid in stores_full}
+short_map = {qid: short_name(name) for qid, name in store_name_map.items()}
 search_map = {}
-for s in stores_full:
-    sn = short_name(s)
-    short_map[s] = sn
-    sid = s.split('-')[0] if '-' in s else ''
-    search_map[s] = json.dumps([sn, sid, s], ensure_ascii=False)
+for qid in stores_full:
+    name = store_name_map[qid]
+    sn = short_name(name)
+    sid = name.split('-')[0] if '-' in name else qid
+    search_map[qid] = json.dumps([sn, sid, name, qid], ensure_ascii=False)
+stores_json = json.dumps(stores_full, ensure_ascii=False)
+store_name_map_json = json.dumps(store_name_map, ensure_ascii=False)
+search_map_json = json.dumps(search_map, ensure_ascii=False)
 
 # 门店基本信息（省市映射）
 store_info_path = os.path.join(BASE, '数据表', '基础信息表', '门店基本信息.xlsx')
@@ -241,11 +257,10 @@ perf_json = json.dumps({
 channels = sorted(df['channel'].unique().tolist())
 dates_all = sorted(df['日期'].unique().tolist())
 
+short_map_json = json.dumps(short_map, ensure_ascii=False)
+
 data_json = json.dumps(data_records, ensure_ascii=False)
 promo_json = json.dumps(promo_records, ensure_ascii=False)
-stores_json = json.dumps(stores_full, ensure_ascii=False)
-short_map_json = json.dumps(short_map, ensure_ascii=False)
-search_map_json = json.dumps(search_map, ensure_ascii=False)
 channels_json = json.dumps(channels, ensure_ascii=False)
 dates_json = json.dumps(dates_all, ensure_ascii=False)
 
@@ -302,8 +317,8 @@ if os.path.exists(rawcat_combined_path := os.path.join(WAREHOUSE, 'product', 'ra
 # 预渲染静态chip HTML（不依赖JS创建）
 # =============================================
 store_chips_html = ''.join(
-    f'<span class="chip active" data-full="{s}">{short_map.get(s, s)}</span>'
-    for s in stores_full
+    f'<span class="chip active" data-full="{qid}">{store_name_map.get(qid, qid)}</span>'
+    for qid in stores_full
 )
 channel_chips_html = ''.join(
     f'<span class="chip active" data-full="{c}">{c}</span>'
@@ -810,6 +825,7 @@ const allChannels = ''' + channels_json + ''';
 const allDates = ''' + dates_json + ''';
 const shortNames = ''' + short_map_json + ''';
 const searchKeys = ''' + search_map_json + ''';
+const storeNameMap = ''' + store_name_map_json + ''';  // qn_store_id -> 标准名
 const storeRegionMap = ''' + store_region_json + ''';  // 门店→所属地区
 const storeCostMap = ''' + store_cost_json + ''';  // 门店→{cost, qnid}
 const storeMeituanMap = ''' + store_meituan_json + ''';  // 门店→美团渠道门店ID
@@ -1205,11 +1221,11 @@ function groupBy(arr, keys) {
 
 function getFiltered() {
     const f=dateFrom, t=dateTo;
-    return rawData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(r['store_name'])&&selectedChannels.includes(r['channel']));
+    return rawData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(String(r['qn_store_id']))&&selectedChannels.includes(r['channel']));
 }
 function getFilteredPromo() {
     const f=dateFrom, t=dateTo;
-    return promoData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(r['store_name']));
+    return promoData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(String(r['qn_store_id'])));
 }
 
 // ============ 环比 ============
@@ -1232,7 +1248,7 @@ function getPrevData(data) {
     const pf = dFmt(prevStart), pt = dFmt(prevEnd);
     return rawData.filter(r =>
         r['日期'] >= pf && r['日期'] <= pt &&
-        selectedStores.includes(r['store_name']) &&
+        selectedStores.includes(String(r['qn_store_id'])) &&
         selectedChannels.includes(r['channel'])
     );
 }
