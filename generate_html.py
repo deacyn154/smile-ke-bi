@@ -317,7 +317,7 @@ if os.path.exists(rawcat_combined_path := os.path.join(WAREHOUSE, 'product', 'ra
 # 预渲染静态chip HTML（不依赖JS创建）
 # =============================================
 store_chips_html = ''.join(
-    f'<span class="chip active" data-full="{qid}">{store_name_map.get(qid, qid)}</span>'
+    f'<span class="chip active" data-full="{qid}" title="{store_name_map.get(qid, qid)}">{short_map.get(qid, store_name_map.get(qid, qid))}</span>'
     for qid in stores_full
 )
 channel_chips_html = ''.join(
