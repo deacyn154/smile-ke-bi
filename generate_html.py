@@ -69,92 +69,53 @@ def clean(records):
         out.append(row)
     return out
 
-# promo 保持原样（小数据）
+data_records = clean(df.to_dict(orient='records'))
+
+# 统一门店名括号: 全→中文括号（避免同店出现两次）
+def std_store(s):
+    if not isinstance(s, str): return s
+    return s.replace('(', '（').replace(')', '）')
+for r in data_records:
+    if 'store_name' in r: r['store_name'] = std_store(r['store_name'])
+
+# 精简字段，减少文件体积
+KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee','store_profit'}
+data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
-promo_json = json.dumps(promo_records, ensure_ascii=False)
 
-# 加载 channel_store_mapping (后续门店标准化需要)
-mapping_path = os.path.join(BASE, 'channel_store_mapping.xlsx')
-if os.path.exists(mapping_path):
-    mapping = pd.read_excel(mapping_path)
-    mapping['channel_store_id'] = mapping['channel_store_id'].astype(str)
-    mapping['qn_store_id'] = pd.to_numeric(mapping['qn_store_id'], errors='coerce').fillna(0).astype(int)
-else:
-    mapping = pd.DataFrame(columns=['qn_store_id','qn_store_name','channel','channel_store_id'])
-
-# 提早构建 store_id_to_name (data_compact 需要用到)
-store_id_to_name = {}
-for _, r in mapping.iterrows():
-    qid = str(int(r['qn_store_id']))
-    name = r['qn_store_name']
-    if qid not in store_id_to_name:
-        store_id_to_name[qid] = name
-
-# 数据压缩: 数组格式 (无key名), 大幅减小体积
-ch_index = {'美团闪购':0, '饿了么':1, '京东到家':2, '线下':3}
-raw = df[['日期','qn_store_id','channel','order_cnt','revenue','store_profit',
-           'commission_profit','neg_cnt','delivery_fee','delivery_order_cnt']]
-data_compact = []
-# 把 store_name 也一起嵌入（不再依赖 JS 端 storeNameMap 查询）
-for _, r in raw.iterrows():
-    qid = int(r['qn_store_id']) if pd.notna(r['qn_store_id']) else 0
-    d = str(r['日期'])[:10].replace('-','')
-    sn = store_id_to_name.get(str(qid), '') if qid else str(r.get('store_name', ''))
-    data_compact.append([
-        d, qid, sn,
-        ch_index.get(r['channel'], 3),
-        int(r['order_cnt'] or 0),
-        round(float(r['revenue'] or 0)),
-        round(float(r['store_profit'] or 0)),
-        round(float(r['commission_profit'] or 0)),
-        int(r['neg_cnt'] or 0),
-        round(float(r['delivery_fee'] or 0)),
-        int(r['delivery_order_cnt'] or 0),
-    ])
-data_json = json.dumps(data_compact, ensure_ascii=False)
-# 额外输出 data.json 给 GitHub Pages 在线加载
-data_json_path = os.path.join(BASE, 'data.json')
-with open(data_json_path, 'w', encoding='utf-8') as f:
-    f.write(data_json)
-# 同时输出 data.js (script 标签加载, 绕过 file:// 的 CORS 限制)
-data_js_path = os.path.join(BASE, 'data.js')
-with open(data_js_path, 'w', encoding='utf-8') as f:
-    f.write('window.DASHBOARD_DATA = ' + data_json + ';')
-
-# 门店标准化: 以 qn_store_id 为唯一键, 名称只来自 mapping (上面已构建)
-
-# promo 门店名替换
+# 合并门店：江门乐购一刻 / 恩平中澳豪庭 统一到江门店
+STORE_MERGE = {
+    'B020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
+    'D020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
+    'D020-乐购一刻（恩平中澳豪庭店）': '乐购一刻（江门店）',
+    'B085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
+    'D085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
+    'B061-微笑客（东莞惠众百货）': '东莞惠众百货',
+    'D061-微笑客（东莞惠众百货）': '东莞惠众百货',
+    'D061-惠众百货（东莞寮步店）': '东莞惠众百货',
+}
+for r in data_records:
+    sn = r.get('store_name', '')
+    if sn in STORE_MERGE:
+        r['store_name'] = STORE_MERGE[sn]
 for r in promo_records:
-    qid = str(r.get('qn_store_id', '')).strip() if r.get('qn_store_id') is not None else ''
-    if qid in store_id_to_name:
-        r['store_name'] = store_id_to_name[qid]
-
-# allStoresFull: 从 df 中提取(去重 qn_store_id)
-all_store_ids = sorted(set(int(r['qn_store_id']) for _, r in df.iterrows() if pd.notna(r['qn_store_id'])))
-stores_full = [str(qid) for qid in all_store_ids]
+    sn = r.get('store_name', '')
+    if sn in STORE_MERGE:
+        r['store_name'] = STORE_MERGE[sn]
 
 # --- Short store name extraction ---
 def short_name(full):
     m = re.search(r'[（(]([^）)]+)[）)]', full)
     return m.group(1) if m else full
 
-# allStoresFull: 用 qn_store_id 列表(去重)
-all_store_ids = sorted(set(int(r['qn_store_id']) for _, r in df.iterrows() if pd.notna(r['qn_store_id'])))
-stores_full = [str(int(qid)) for qid in all_store_ids]
-store_name_map = {qid: store_id_to_name.get(qid, f'门店{qid}') for qid in stores_full}
-short_map = {qid: short_name(name) for qid, name in store_name_map.items()}
-# 同时支持完整名查询 (charts里 s.store_name 是完整名)
-for qid, name in store_name_map.items():
-    short_map[name] = short_name(name)
+stores_full = sorted(set(r['store_name'] for r in data_records))
+short_map = {}
 search_map = {}
-for qid in stores_full:
-    name = store_name_map[qid]
-    sn = short_name(name)
-    sid = name.split('-')[0] if '-' in name else qid
-    search_map[qid] = json.dumps([sn, sid, name, qid], ensure_ascii=False)
-stores_json = json.dumps(stores_full, ensure_ascii=False)
-store_name_map_json = json.dumps(store_name_map, ensure_ascii=False)
-search_map_json = json.dumps(search_map, ensure_ascii=False)
+for s in stores_full:
+    sn = short_name(s)
+    short_map[s] = sn
+    sid = s.split('-')[0] if '-' in s else ''
+    search_map[s] = json.dumps([sn, sid, s], ensure_ascii=False)
 
 # 门店基本信息（省市映射）
 store_info_path = os.path.join(BASE, '数据表', '基础信息表', '门店基本信息.xlsx')
@@ -280,8 +241,11 @@ perf_json = json.dumps({
 channels = sorted(df['channel'].unique().tolist())
 dates_all = sorted(df['日期'].unique().tolist())
 
+data_json = json.dumps(data_records, ensure_ascii=False)
+promo_json = json.dumps(promo_records, ensure_ascii=False)
+stores_json = json.dumps(stores_full, ensure_ascii=False)
 short_map_json = json.dumps(short_map, ensure_ascii=False)
-
+search_map_json = json.dumps(search_map, ensure_ascii=False)
 channels_json = json.dumps(channels, ensure_ascii=False)
 dates_json = json.dumps(dates_all, ensure_ascii=False)
 
@@ -338,8 +302,8 @@ if os.path.exists(rawcat_combined_path := os.path.join(WAREHOUSE, 'product', 'ra
 # 预渲染静态chip HTML（不依赖JS创建）
 # =============================================
 store_chips_html = ''.join(
-    f'<span class="chip active" data-full="{qid}" title="{store_name_map.get(qid, qid)}">{short_map.get(qid, store_name_map.get(qid, qid))}</span>'
-    for qid in stores_full
+    f'<span class="chip active" data-full="{s}">{short_map.get(s, s)}</span>'
+    for s in stores_full
 )
 channel_chips_html = ''.join(
     f'<span class="chip active" data-full="{c}">{c}</span>'
@@ -614,7 +578,6 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 <div class="dashboard" id="dashboard">
     <div class="header">
         <h1>微笑客经营看板</h1>
-        <div id="loadingMsg" style="text-align:center;padding:40px;color:#6b7280;font-size:14px;">⏳ 正在加载数据...</div>
         <div style="display:flex;align-items:center;gap:8px;">
             <button class="export-btn" onclick="openProfitModal()" style="font-size:13px;padding:6px 16px;">💰 门店盈利分析</button>
             <button class="export-btn" onclick="exportExcel()">📥 导出</button>
@@ -623,7 +586,8 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
         </div>
     </div>
     <div class="page-nav" style="display:flex;gap:0;margin-bottom:16px;">
-        <button class="page-btn active" onclick="switchPage('ops',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px;cursor:pointer;font-size:14px;">运营数据</button>
+        <button class="page-btn active" onclick="switchPage('ops',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px 0 0 8px;cursor:pointer;font-size:14px;">运营数据</button>
+        <button class="page-btn" onclick="switchPage('product',this)" style="padding:8px 24px;border:1px solid var(--border);background:var(--card);color:var(--text-dim);border-radius:0 8px 8px 0;cursor:pointer;font-size:14px;border-left:none;">商品运营</button>
     </div>
     <div id="page-ops">
 
@@ -833,34 +797,8 @@ function exportStoreCat() {
 }
 
 
-// ============ DATA: 直接嵌入，无异步加载 ============
-const rawCompact = ''' + data_json + ''';
-const chNames = ['美团闪购','饿了么','京东到家','线下'];
-// 同步解码（store_name已直接嵌入, 无需查表）
-let rawData = rawCompact.map(r => ({
-    '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-    'store_name': r[2],
-    'qn_store_id': r[1],
-    'channel': chNames[r[3]],
-    'order_cnt': r[4],
-    'revenue': r[5] || 0,
-    'store_profit': r[6] || 0,
-    'commission_profit': r[7] || 0,
-    'neg_cnt': r[8] || 0,
-    'delivery_fee': r[9] || 0,
-    'delivery_order_cnt': r[10] || 0,
-    'real_profit': r[7] || 0,
-    'commission_fee': (r[5]||0) - (r[7]||0),
-    'promo_fee': Math.max((r[5]||0) - (r[6]||0), 0),
-}));
-rawData.sort((a,b) => {
-    if (a['日期'] !== b['日期']) return a['日期'] < b['日期'] ? -1 : 1;
-    if (a['qn_store_id'] !== b['qn_store_id']) return a['qn_store_id'] - b['qn_store_id'];
-    return a['channel'] < b['channel'] ? -1 : a['channel'] > b['channel'] ? 1 : 0;
-});
-try { document.getElementById('loadingMsg').style.display = 'none'; } catch(e) {}
-initDashboard();
-initDashboard();
+// ============ DATA ============
+const rawData = ''' + data_json + ''';
 const promoData = ''' + promo_json + ''';
 const productData = ''' + product_json + ''';
 const allProductData = ''' + all_product_json + ''';
@@ -872,7 +810,6 @@ const allChannels = ''' + channels_json + ''';
 const allDates = ''' + dates_json + ''';
 const shortNames = ''' + short_map_json + ''';
 const searchKeys = ''' + search_map_json + ''';
-const storeNameMap = ''' + store_name_map_json + ''';  // qn_store_id -> 标准名
 const storeRegionMap = ''' + store_region_json + ''';  // 门店→所属地区
 const storeCostMap = ''' + store_cost_json + ''';  // 门店→{cost, qnid}
 const storeMeituanMap = ''' + store_meituan_json + ''';  // 门店→美团渠道门店ID
@@ -914,7 +851,7 @@ const storeProvince = {};
         if (pa>=0 && pb<0) return -1;
         if (pa<0 && pb>=0) return 1;
         if (pa>=0 && pb>=0 && pa!==pb) return pa-pb;
-        return a < b ? -1 : a > b ? 1 : 0;
+        return a.localeCompare(b);
     });
 })();
 
@@ -1239,18 +1176,12 @@ function switchTab(name, btn) {
     document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
     btn.classList.add('active');
     document.getElementById('tab-'+name).classList.add('active');
-    // 重画当前tab的charts (refresh仅画active的)
-    setTimeout(() => refreshTabCharts(name), 50);
-}
-
-// 按tab重画charts
-function refreshTabCharts(name) {
-    const data = getFiltered();
-    if (name === 'channel') renderChannel(data);
-    else if (name === 'time') renderTimeAnalysis(data);
-    else if (name === 'neg') renderNeg(data);
-    else if (name === 'delivery') renderDelivery(data);
-    else if (name === 'store') renderStore(data);
+    // Force Plotly charts to fill container after tab switch
+    setTimeout(() => {
+        document.querySelectorAll('#tab-'+name+' .js-plotly-plot').forEach(el => {
+            if (el._fullLayout) Plotly.Plots.resize(el);
+        });
+    }, 50);
 }
 
 // ============ HELPERS ============
@@ -1274,11 +1205,11 @@ function groupBy(arr, keys) {
 
 function getFiltered() {
     const f=dateFrom, t=dateTo;
-    return rawData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(String(r['qn_store_id']))&&selectedChannels.includes(r['channel']));
+    return rawData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(r['store_name'])&&selectedChannels.includes(r['channel']));
 }
 function getFilteredPromo() {
     const f=dateFrom, t=dateTo;
-    return promoData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(String(r['qn_store_id'])));
+    return promoData.filter(r=>r['日期']>=f&&r['日期']<=t&&selectedStores.includes(r['store_name']));
 }
 
 // ============ 环比 ============
@@ -1301,7 +1232,7 @@ function getPrevData(data) {
     const pf = dFmt(prevStart), pt = dFmt(prevEnd);
     return rawData.filter(r =>
         r['日期'] >= pf && r['日期'] <= pt &&
-        selectedStores.includes(String(r['qn_store_id'])) &&
+        selectedStores.includes(r['store_name']) &&
         selectedChannels.includes(r['channel'])
     );
 }
@@ -1437,32 +1368,15 @@ function makeSortable(tableId, data, colDefs, formatRowFn) {
     tableSortState[tableId]=state;
 
     if(state.col>=0&&state.col<colDefs.length) {
-        // 环比列: 沿用state.col的mom key排序 (而非colDefs[colIdx])
-        const useMom = (tableId==='storeTable' && state.col===13);
-        if (useMom) {
-            // 从 state.momLastCol 取上次真实排序的列, 默认用 net
-            const lastCol = state.momLastCol != null ? state.momLastCol : 6;
-            const cdef = colDefs[lastCol];
-            data.sort((a,b)=>{
-                const va = a.mom?.[cdef.key] ?? 0;
-                const vb = b.mom?.[cdef.key] ?? 0;
-                if(va<vb) return state.asc?-1:1;
-                if(va>vb) return state.asc?1:-1;
-                return 0;
-            });
-        } else {
-            // 记录最近一次真实排序列, 用于环比排序
-            state.momLastCol = state.col;
-            const cdef=colDefs[state.col];
-            data.sort((a,b)=>{
-                let va=a[cdef.key]||0, vb=b[cdef.key]||0;
-                if(cdef.type==='num'||cdef.type==='pct') { va=Number(va); vb=Number(vb); }
-                else { va=String(va); vb=String(vb); }
-                if(va<vb) return state.asc?-1:1;
-                if(va>vb) return state.asc?1:-1;
-                return 0;
-            });
-        }
+        const cdef=colDefs[state.col];
+        data.sort((a,b)=>{
+            let va=a[cdef.key]||0, vb=b[cdef.key]||0;
+            if(cdef.type==='num'||cdef.type==='pct') { va=Number(va); vb=Number(vb); }
+            else { va=String(va); vb=String(vb); }
+            if(va<vb) return state.asc?-1:1;
+            if(va>vb) return state.asc?1:-1;
+            return 0;
+        });
     }
 
     data.forEach((r,i)=>{ h+=formatRowFn(r,i); });
@@ -1477,13 +1391,8 @@ function makeSortable(tableId, data, colDefs, formatRowFn) {
 }
 function sortAndRender(tableId, colIdx, type) {
     const state=tableSortState[tableId]||{col:-1,asc:true};
-    // 环比列(storeTable col 13): 切换升降序, state.col=13 表示按环比排
-    if (tableId==='storeTable' && colIdx===13) {
-        state.asc = !(state.asc);
-        state.col = 13;
-    } else if(state.col===colIdx) state.asc=!state.asc;
+    if(state.col===colIdx) state.asc=!state.asc;
     else { state.col=colIdx; state.asc=true; }
-    tableSortState[tableId]=state;
     refresh();
 }
 
@@ -1514,7 +1423,7 @@ function renderKPIs(data) {
 
     // Get daily data for sparklines
     const byDate=groupBy(data,['日期']);
-    byDate.sort((a,b)=>a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
+    byDate.sort((a,b)=>a.日期.localeCompare(b.日期));
     const spkOrd=byDate.map(d=>d.order_cnt||0);
     const spkRev=byDate.map(d=>d.revenue||0);
     const spkGp=byDate.map(d=>d.real_profit||0);
@@ -1637,7 +1546,7 @@ function renderStore(data) {
             const po = ['广东省','湖南省','广西壮族自治区','福建省','江西省','海南省','湖北省','其他'];
             return po.indexOf(pa) - po.indexOf(pb);
         }
-        return (a.store_name||'') < (b.store_name||'') ? -1 : (a.store_name||'') > (b.store_name||'') ? 1 : 0;
+        return (a.store_name||'').localeCompare(b.store_name||'');
     });
 
     const rows=stores.map(s=>{
@@ -1850,7 +1759,7 @@ function renderPromo(pd) {
 // ============ TIME ANALYSIS TAB ============
 function renderTimeAnalysis(data) {
     const byDate = groupBy(data, ['日期']);
-    byDate.sort((a,b) => a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
+    byDate.sort((a,b) => a.日期.localeCompare(b.日期));
     const dates = byDate.map(d => d.日期);
     const orders = byDate.map(d => d.order_cnt || 0);
     const profits = byDate.map(d => d.commission_profit || 0);
@@ -1926,7 +1835,7 @@ function renderTimeAnalysis(data) {
 // ============ NEG TAB ============
 function renderNeg(data) {
     const byDate = groupBy(data, ['日期']);
-    byDate.sort((a, b) => a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
+    byDate.sort((a, b) => a.日期.localeCompare(b.日期));
     const dates = byDate.map(d => d.日期);
     const negPcts = byDate.map(d => d.order_cnt > 0 ? ((d.neg_cnt || 0) / d.order_cnt * 100) : 0);
     const maxP = Math.max(...negPcts, 1);
@@ -1995,7 +1904,7 @@ function renderNeg(data) {
 // ============ DELIVERY TAB ============
 function renderDelivery(data) {
     const byDate = groupBy(data, ['日期']);
-    byDate.sort((a, b) => a.日期 < b.日期 ? -1 : a.日期 > b.日期 ? 1 : 0);
+    byDate.sort((a, b) => a.日期.localeCompare(b.日期));
     const dates = byDate.map(d => d.日期);
     const avgCosts = byDate.map(d => d.delivery_order_cnt > 0 ? (d.delivery_fee / d.delivery_order_cnt) : 0);
     const maxC = Math.max(...avgCosts, 1);
@@ -2581,7 +2490,7 @@ function initDashboard() {
     document.getElementById('updateTime').textContent = '数据更新: ' + allDates[allDates.length - 1];
     refresh();
 }
-// initDashboard() 在 loadData() 完成后调用——见上方 async 函数
+initDashboard();
 </script>
 </body>
 </html>'''
@@ -2597,4 +2506,4 @@ with open(INDEX_OUT, 'w', encoding='utf-8') as f:
 print(f'Generated: {OUTPUT}')
 print(f'Synced  : {INDEX_OUT}')
 print(f'Size: {os.path.getsize(OUTPUT) / 1024:.0f} KB')
-print(f'Data: {len(df)} rows, {len(dates_all)} days, {len(stores_full)} stores')
+print(f'Data: {len(data_records)} rows, {len(dates_all)} days, {len(stores_full)} stores')
