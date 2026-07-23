@@ -89,6 +89,10 @@ for _, r in raw.iterrows():
         int(r['delivery_order_cnt'] or 0),
     ])
 data_json = json.dumps(data_compact, ensure_ascii=False)
+# 额外输出 data.json 给 GitHub Pages 在线加载
+data_json_path = os.path.join(BASE, 'data.json')
+with open(data_json_path, 'w', encoding='utf-8') as f:
+    f.write(data_json)
 
 # promo 保持原样（小数据）
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
@@ -599,6 +603,7 @@ th.sortable.desc::after { content:'▼'; opacity:1; color:var(--accent); }
 <div class="dashboard" id="dashboard">
     <div class="header">
         <h1>微笑客经营看板</h1>
+        <div id="loadingMsg" style="text-align:center;padding:40px;color:#6b7280;font-size:14px;">⏳ 正在加载数据...</div>
         <div style="display:flex;align-items:center;gap:8px;">
             <button class="export-btn" onclick="openProfitModal()" style="font-size:13px;padding:6px 16px;">💰 门店盈利分析</button>
             <button class="export-btn" onclick="exportExcel()">📥 导出</button>
@@ -819,26 +824,44 @@ function exportStoreCat() {
 
 
 // ============ DATA ============
-const rawCompact = ''' + data_json + ''';  // compact: [date, qn_id, ch_idx, o, r, sp, cp, neg, df, doc]
-// 解码为完整对象
+const DATA_URL = "https://raw.githubusercontent.com/deacyn154/smile-ke-bi/main/data.json";
+let rawCompact = [];
 const chNames = ['美团闪购','饿了么','京东到家','线下'];
-const rawData = rawCompact.map(r => ({
-    '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-    'store_name': storeNameMap[String(r[1])] || String(r[1]),
-    'qn_store_id': r[1],
-    'channel': chNames[r[2]],
-    'order_cnt': r[3],
-    'revenue': r[4] || 0,
-    'store_profit': r[5] || 0,
-    'commission_profit': r[6] || 0,
-    'neg_cnt': r[7] || 0,
-    'delivery_fee': r[8] || 0,
-    'delivery_order_cnt': r[9] || 0,
-    'real_profit': r[6] || 0,
-    'commission_fee': (r[4]||0) - (r[6]||0),
-    'promo_fee': ((r[4]||0) - (r[5]||0)) + ((r[4]||0) - (r[6]||0)),
-}));
-rawData.sort((a,b) => (a['日期']+a['store_name']+a['channel']).localeCompare(b['日期']+b['store_name']+b['channel']));
+let rawData = [];
+
+// 从 GitHub 加载数据(支持本地回退)
+async function loadData() {
+    try {
+        const resp = await fetch(DATA_URL, {cache: "no-cache"});
+        if (!resp.ok) throw new Error("fetch failed");
+        rawCompact = await resp.json();
+    } catch(e) {
+        console.warn("GitHub load failed");
+        rawCompact = [];
+    }
+    // 解码
+    rawData = rawCompact.map(r => ({
+        '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
+        'store_name': storeNameMap[String(r[1])] || String(r[1]),
+        'qn_store_id': r[1],
+        'channel': chNames[r[2]],
+        'order_cnt': r[3],
+        'revenue': r[4] || 0,
+        'store_profit': r[5] || 0,
+        'commission_profit': r[6] || 0,
+        'neg_cnt': r[7] || 0,
+        'delivery_fee': r[8] || 0,
+        'delivery_order_cnt': r[9] || 0,
+        'real_profit': r[6] || 0,
+        'commission_fee': (r[4]||0) - (r[6]||0),
+        'promo_fee': ((r[4]||0) - (r[5]||0)) + ((r[4]||0) - (r[6]||0)),
+    }));
+    rawData.sort((a,b) => (a['日期']+a['store_name']+a['channel']).localeCompare(b['日期']+b['store_name']+b['channel']));
+    document.getElementById('loadingMsg').style.display = 'none';
+    initDashboard();
+}
+// 页面加载时调用
+loadData();
 const promoData = ''' + promo_json + ''';
 const productData = ''' + product_json + ''';
 const allProductData = ''' + all_product_json + ''';
@@ -2531,7 +2554,7 @@ function initDashboard() {
     document.getElementById('updateTime').textContent = '数据更新: ' + allDates[allDates.length - 1];
     refresh();
 }
-initDashboard();
+// initDashboard() 在 loadData() 完成后调用——见上方 async 函数
 </script>
 </body>
 </html>'''
