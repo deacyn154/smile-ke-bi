@@ -838,7 +838,20 @@ let rawData = [];
 
 // 加载数据: 优先用 <script> 注入的 window.DASHBOARD_DATA (本地 file:// 也能用), 否则 fetch
 async function loadData() {
+    const ld = document.getElementById('loadingMsg');
+    if (!ld) return;
+
+    // 进度更新
+    const progressSteps = ['📥 加载数据文件...', '🔍 解析记录中...', '📊 汇总指标中...'];
+    let step = 0;
+    function updateProgress(msg) {
+        const pct = Math.min(Math.round((step / progressSteps.length) * 100), 95);
+        ld.innerHTML = '<div style="max-width:300px;margin:0 auto;"><div style="background:#e5e7eb;border-radius:8px;height:12px;overflow:hidden;margin-bottom:8px;"><div style="background:var(--accent,#4f6ef7);height:100%;width:'+pct+'%;transition:width .3s;border-radius:8px;"></div></div><div style="color:#6b7280;font-size:13px;">'+(msg||progressSteps[step]||'')+'</div></div>';
+        step++;
+    }
+
     // 1) 尝试 script 标签注入
+    updateProgress();
     if (window.DASHBOARD_DATA) {
         rawCompact = window.DASHBOARD_DATA;
     } else {
@@ -848,11 +861,11 @@ async function loadData() {
             if (!resp.ok) throw new Error("fetch failed");
             rawCompact = await resp.json();
         } catch(e) {
-            console.warn("GitHub load failed");
+            console.warn("Data fetch failed");
             rawCompact = [];
         }
     }
-    }
+    updateProgress();
     // 解码
     rawData = rawCompact.map(r => ({
         '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
@@ -871,8 +884,12 @@ async function loadData() {
         'promo_fee': Math.max((r[4]||0) - (r[5]||0), 0),
     }));
     rawData.sort((a,b) => (a['日期']+a['store_name']+a['channel']).localeCompare(b['日期']+b['store_name']+b['channel']));
-    document.getElementById('loadingMsg').style.display = 'none';
-    initDashboard();
+    updateProgress('✅ 数据就绪');
+    // 延迟一下让进度条到100%
+    setTimeout(() => {
+        document.getElementById('loadingMsg').style.display = 'none';
+        initDashboard();
+    }, 200);
 }
 // 页面加载时调用
 loadData();
