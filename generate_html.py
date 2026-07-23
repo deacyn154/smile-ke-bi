@@ -93,6 +93,10 @@ data_json = json.dumps(data_compact, ensure_ascii=False)
 data_json_path = os.path.join(BASE, 'data.json')
 with open(data_json_path, 'w', encoding='utf-8') as f:
     f.write(data_json)
+# 同时输出 data.js (script 标签加载, 绕过 file:// 的 CORS 限制)
+data_js_path = os.path.join(BASE, 'data.js')
+with open(data_js_path, 'w', encoding='utf-8') as f:
+    f.write('window.DASHBOARD_DATA = ' + data_json + ';')
 
 # promo 保持原样（小数据）
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
@@ -349,6 +353,7 @@ html = '''<!DOCTYPE html>
 <title>微笑客经营看板</title>
 <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.32.0/plotly.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="data.js"></script>
 <style>
 :root {
     --bg: #f5f6f8; --card: #ffffff; --border: #e5e7eb;
@@ -826,20 +831,27 @@ function exportStoreCat() {
 
 
 // ============ DATA ============
-const DATA_URL = "./data.json";  // 同域加载，无CORS问题
+const DATA_URL = "./data.json";
 let rawCompact = [];
 const chNames = ['美团闪购','饿了么','京东到家','线下'];
 let rawData = [];
 
-// 从 GitHub 加载数据(支持本地回退)
+// 加载数据: 优先用 <script> 注入的 window.DASHBOARD_DATA (本地 file:// 也能用), 否则 fetch
 async function loadData() {
-    try {
-        const resp = await fetch(DATA_URL, {cache: "no-cache"});
-        if (!resp.ok) throw new Error("fetch failed");
-        rawCompact = await resp.json();
-    } catch(e) {
-        console.warn("GitHub load failed");
-        rawCompact = [];
+    // 1) 尝试 script 标签注入
+    if (window.DASHBOARD_DATA) {
+        rawCompact = window.DASHBOARD_DATA;
+    } else {
+        // 2) fetch (需要 http:// 协议, file:// 会 CORS 失败)
+        try {
+            const resp = await fetch(DATA_URL, {cache: "no-cache"});
+            if (!resp.ok) throw new Error("fetch failed");
+            rawCompact = await resp.json();
+        } catch(e) {
+            console.warn("GitHub load failed");
+            rawCompact = [];
+        }
+    }
     }
     // 解码
     rawData = rawCompact.map(r => ({
