@@ -69,16 +69,39 @@ def clean(records):
         out.append(row)
     return out
 
+# promo 保持原样（小数据）
+promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
+promo_json = json.dumps(promo_records, ensure_ascii=False)
+
+# 加载 channel_store_mapping (后续门店标准化需要)
+mapping_path = os.path.join(BASE, 'channel_store_mapping.xlsx')
+if os.path.exists(mapping_path):
+    mapping = pd.read_excel(mapping_path)
+    mapping['channel_store_id'] = mapping['channel_store_id'].astype(str)
+    mapping['qn_store_id'] = pd.to_numeric(mapping['qn_store_id'], errors='coerce').fillna(0).astype(int)
+else:
+    mapping = pd.DataFrame(columns=['qn_store_id','qn_store_name','channel','channel_store_id'])
+
+# 提早构建 store_id_to_name (data_compact 需要用到)
+store_id_to_name = {}
+for _, r in mapping.iterrows():
+    qid = str(int(r['qn_store_id']))
+    name = r['qn_store_name']
+    if qid not in store_id_to_name:
+        store_id_to_name[qid] = name
+
 # 数据压缩: 数组格式 (无key名), 大幅减小体积
 ch_index = {'美团闪购':0, '饿了么':1, '京东到家':2, '线下':3}
 raw = df[['日期','qn_store_id','channel','order_cnt','revenue','store_profit',
            'commission_profit','neg_cnt','delivery_fee','delivery_order_cnt']]
 data_compact = []
+# 把 store_name 也一起嵌入（不再依赖 JS 端 storeNameMap 查询）
 for _, r in raw.iterrows():
     qid = int(r['qn_store_id']) if pd.notna(r['qn_store_id']) else 0
     d = str(r['日期'])[:10].replace('-','')
+    sn = store_id_to_name.get(str(qid), '') if qid else str(r.get('store_name', ''))
     data_compact.append([
-        d, qid,
+        d, qid, sn,
         ch_index.get(r['channel'], 3),
         int(r['order_cnt'] or 0),
         round(float(r['revenue'] or 0)),
@@ -98,26 +121,7 @@ data_js_path = os.path.join(BASE, 'data.js')
 with open(data_js_path, 'w', encoding='utf-8') as f:
     f.write('window.DASHBOARD_DATA = ' + data_json + ';')
 
-# promo 保持原样（小数据）
-promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
-promo_json = json.dumps(promo_records, ensure_ascii=False)
-
-# 加载 channel_store_mapping (后续门店标准化需要)
-mapping_path = os.path.join(BASE, 'channel_store_mapping.xlsx')
-if os.path.exists(mapping_path):
-    mapping = pd.read_excel(mapping_path)
-    mapping['channel_store_id'] = mapping['channel_store_id'].astype(str)
-    mapping['qn_store_id'] = pd.to_numeric(mapping['qn_store_id'], errors='coerce').fillna(0).astype(int)
-else:
-    mapping = pd.DataFrame(columns=['qn_store_id','qn_store_name','channel','channel_store_id'])
-
-# 门店标准化: 以 qn_store_id 为唯一键, 名称只来自 mapping
-store_id_to_name = {}
-for _, r in mapping.iterrows():
-    qid = str(int(r['qn_store_id']))
-    name = r['qn_store_name']
-    if qid not in store_id_to_name:
-        store_id_to_name[qid] = name
+# 门店标准化: 以 qn_store_id 为唯一键, 名称只来自 mapping (上面已构建)
 
 # promo 门店名替换
 for r in promo_records:
@@ -832,29 +836,30 @@ function exportStoreCat() {
 // ============ DATA: 直接嵌入，无异步加载 ============
 const rawCompact = ''' + data_json + ''';
 const chNames = ['美团闪购','饿了么','京东到家','线下'];
-// 同步解码
+// 同步解码（store_name已直接嵌入, 无需查表）
 let rawData = rawCompact.map(r => ({
     '日期': String(r[0]).replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3'),
-    'store_name': storeNameMap[String(r[1])] || String(r[1]),
+    'store_name': r[2],
     'qn_store_id': r[1],
-    'channel': chNames[r[2]],
-    'order_cnt': r[3],
-    'revenue': r[4] || 0,
-    'store_profit': r[5] || 0,
-    'commission_profit': r[6] || 0,
-    'neg_cnt': r[7] || 0,
-    'delivery_fee': r[8] || 0,
-    'delivery_order_cnt': r[9] || 0,
-    'real_profit': r[6] || 0,
-    'commission_fee': (r[4]||0) - (r[6]||0),
-    'promo_fee': Math.max((r[4]||0) - (r[5]||0), 0),
+    'channel': chNames[r[3]],
+    'order_cnt': r[4],
+    'revenue': r[5] || 0,
+    'store_profit': r[6] || 0,
+    'commission_profit': r[7] || 0,
+    'neg_cnt': r[8] || 0,
+    'delivery_fee': r[9] || 0,
+    'delivery_order_cnt': r[10] || 0,
+    'real_profit': r[7] || 0,
+    'commission_fee': (r[5]||0) - (r[7]||0),
+    'promo_fee': Math.max((r[5]||0) - (r[6]||0), 0),
 }));
 rawData.sort((a,b) => {
     if (a['日期'] !== b['日期']) return a['日期'] < b['日期'] ? -1 : 1;
     if (a['qn_store_id'] !== b['qn_store_id']) return a['qn_store_id'] - b['qn_store_id'];
     return a['channel'] < b['channel'] ? -1 : a['channel'] > b['channel'] ? 1 : 0;
 });
-document.getElementById('loadingMsg').style.display = 'none';
+try { document.getElementById('loadingMsg').style.display = 'none'; } catch(e) {}
+initDashboard();
 initDashboard();
 const promoData = ''' + promo_json + ''';
 const productData = ''' + product_json + ''';
