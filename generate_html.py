@@ -126,37 +126,74 @@ def clean(records):
 
 data_records = clean(df.to_dict(orient='records'))
 
-# 统一门店名括号: 全→中文括号（避免同店出现两次）
-def std_store(s):
-    if not isinstance(s, str): return s
-    return s.replace('(', '（').replace(')', '）')
-for r in data_records:
-    if 'store_name' in r: r['store_name'] = std_store(r['store_name'])
+# ============================================================
+# 核心修复：用 qn_store_id 映射统一 store_name，消除重复
+# ============================================================
+# 1. 从 mapping 构建 qn_store_id → 最新门店名 的映射
+qn_to_name = {}
+for _, row in mapping.iterrows():
+    qn = int(row['qn_store_id'])
+    name = str(row['qn_store_name']).strip()
+    qn_to_name[qn] = name  # 每个 qn_store_id 用一个标准名
 
-# 精简字段，减少文件体积
-KEEP_FIELDS = {'store_name','日期','channel','qn_store_id','order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt','delivery_fee','delivery_order_cnt','promo_fee','store_profit'}
-data_records = [{k:v for k,v in r.items() if k in KEEP_FIELDS} for r in data_records]
+# 2. 用 qn_store_id 覆盖 store_name（消除全角/半角、改名等变体）
+for r in data_records:
+    qn = r.get('qn_store_id')
+    if qn and int(float(qn)) in qn_to_name:
+        r['store_name'] = qn_to_name[int(float(qn))]
+    else:
+        # fallback: 标准化括号
+        sn = r.get('store_name', '')
+        if isinstance(sn, str):
+            r['store_name'] = sn.replace('(', '（').replace(')', '）')
+
+# 3. 合并客无忧POS → 线下
+for r in data_records:
+    if r.get('channel') == '客无忧POS':
+        r['channel'] = '线下'
+
+# 4. 合并同(qn_store_id, channel, date)的数据（解决同一门店POS+丰派合并）
+from collections import defaultdict
+merged = {}
+for r in data_records:
+    qn = int(float(r.get('qn_store_id', 0)))
+    ch = r.get('channel', '')
+    dt = r.get('日期', '')
+    key = (qn, ch, dt)
+    if key not in merged:
+        merged[key] = {
+            'store_name': r['store_name'],
+            '日期': dt, 'channel': ch, 'qn_store_id': qn,
+            'order_cnt': 0, 'revenue': 0, 'real_profit': 0,
+            'commission_fee': 0, 'commission_profit': 0, 'neg_cnt': 0,
+            'delivery_fee': 0, 'delivery_order_cnt': 0, 'promo_fee': 0, 'store_profit': 0
+        }
+    m = merged[key]
+    m['store_name'] = r['store_name']  # 用最新的名称
+    for k in ['order_cnt','revenue','real_profit','commission_fee','commission_profit','neg_cnt',
+              'delivery_fee','delivery_order_cnt','promo_fee','store_profit']:
+        m[k] += float(r.get(k, 0) or 0)
+
+data_records = list(merged.values())
+# round
+for r in data_records:
+    for k in ['revenue','real_profit','commission_fee','commission_profit','delivery_fee','promo_fee','store_profit']:
+        r[k] = round(r[k], 2)
+    r['order_cnt'] = int(r['order_cnt'])
+    r['neg_cnt'] = int(r['neg_cnt'])
+    r['delivery_order_cnt'] = int(r['delivery_order_cnt'])
+
 promo_records = clean(promo.to_dict(orient='records')) if promo is not None else []
 
-# 合并门店：江门乐购一刻 / 恩平中澳豪庭 统一到江门店
-STORE_MERGE = {
-    'B020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
-    'D020-微笑客（江门乐购一刻）': '乐购一刻（江门店）',
-    'D020-乐购一刻（恩平中澳豪庭店）': '乐购一刻（江门店）',
-    'B085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
-    'D085-微笑客（慕臣便利阳逻店）': '慕臣便利阳逻店',
-    'B061-微笑客（东莞惠众百货）': '东莞惠众百货',
-    'D061-微笑客（东莞惠众百货）': '东莞惠众百货',
-    'D061-惠众百货（东莞寮步店）': '东莞惠众百货',
-}
-for r in data_records:
-    sn = r.get('store_name', '')
-    if sn in STORE_MERGE:
-        r['store_name'] = STORE_MERGE[sn]
+# 同样对 promo 覆盖 store_name
 for r in promo_records:
-    sn = r.get('store_name', '')
-    if sn in STORE_MERGE:
-        r['store_name'] = STORE_MERGE[sn]
+    qn = r.get('qn_store_id')
+    if qn:
+        try:
+            qn_int = int(float(qn))
+            if qn_int in qn_to_name:
+                r['store_name'] = qn_to_name[qn_int]
+        except: pass
 
 # --- Short store name extraction ---
 def short_name(full):
