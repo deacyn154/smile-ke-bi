@@ -141,31 +141,31 @@ conn.commit()
 n = bulk_insert('daily_profit', cols_db, rows, 300)
 print(f'  Excel有 {len(date_strs)} 个日期，覆盖后 -> {n} 行')
 
-# === 5. 每日推广费（增量：按日期覆盖）===
-print('5/5 每日推广费...')
-promo_df = pd.read_excel(os.path.join(BASE, 'warehouse', 'promo_daily.xlsx'))
-rows = []
-for _, r in promo_df.iterrows():
-    rows.append([
-        pd.to_datetime(r['日期']).strftime('%Y-%m-%d'),
-        safe_val(r.get('store_name')),
-        safe_val(r.get('qn_store_id')),
-        safe_val(r.get('channel')),
-        safe_val(r.get('promo_fee'), float)
-    ])
+# === 5. 每日推广费（已弃用：推广费用直接在daily_profit表的promo_fee字段中）===
+# print('5/5 每日推广费...')
+# promo_df = pd.read_excel(os.path.join(BASE, 'warehouse', 'promo_daily.xlsx'))
+# rows = []
+# for _, r in promo_df.iterrows():
+#     rows.append([
+#         pd.to_datetime(r['日期']).strftime('%Y-%m-%d'),
+#         safe_val(r.get('store_name')),
+#         safe_val(r.get('qn_store_id')),
+#         safe_val(r.get('channel')),
+#         safe_val(r.get('promo_fee'), float)
+#     ])
 
-dates_in_promo = sorted(promo_df['日期'].dropna().unique())
-if len(dates_in_promo) > 0:
-    date_strs = [pd.to_datetime(d).strftime('%Y-%m-%d') for d in dates_in_promo]
-    if len(date_strs) <= 10:
-        for d in date_strs:
-            cursor.execute('DELETE FROM daily_promo WHERE dt=%s', (d,))
-    else:
-        min_d, max_d = min(date_strs), max(date_strs)
-        cursor.execute('DELETE FROM daily_promo WHERE dt>=%s AND dt<=%s', (min_d, max_d))
-conn.commit()
-n = bulk_insert('daily_promo', ['dt','store_name','qn_store_id','channel','promo_fee'], rows)
-print(f'  Excel有 {len(date_strs)} 个日期，覆盖后 -> {n} 行')
+# dates_in_promo = sorted(promo_df['日期'].dropna().unique())
+# if len(dates_in_promo) > 0:
+#     date_strs = [pd.to_datetime(d).strftime('%Y-%m-%d') for d in dates_in_promo]
+#     if len(date_strs) <= 10:
+#         for d in date_strs:
+#             cursor.execute('DELETE FROM daily_promo WHERE dt=%s', (d,))
+#     else:
+#         min_d, max_d = min(date_strs), max(date_strs)
+#         cursor.execute('DELETE FROM daily_promo WHERE dt>=%s AND dt<=%s', (min_d, max_d))
+# conn.commit()
+# n = bulk_insert('daily_promo', ['dt','store_name','qn_store_id','channel','promo_fee'], rows)
+# print(f'  Excel有 {len(date_strs)} 个日期，覆盖后 -> {n} 行')
 
 # === 6. 补货参考表（按月覆盖）===
 print('6/7 补货参考表...')

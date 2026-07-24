@@ -34,18 +34,14 @@ if USE_MYSQL:
     """
     df = pd.read_sql(query, engine)
     df['日期'] = df['日期'].astype(str)
-    promo = pd.read_sql("SELECT dt AS `日期`, store_name, qn_store_id, channel, promo_fee FROM daily_promo", engine)
-    promo['日期'] = promo['日期'].astype(str)
+    # 推广费用直接从daily_profit表的promo_fee字段获取，不再使用daily_promo表
+    promo = None
 else:
     df = pd.read_excel(os.path.join(WAREHOUSE, 'daily_store_channel_profit.xlsx'))
     df['日期'] = pd.to_datetime(df['日期']).dt.strftime('%Y-%m-%d')
     promo = None
-    promo_path = os.path.join(WAREHOUSE, 'promo_daily.xlsx')
-    if os.path.exists(promo_path):
-        promo = pd.read_excel(promo_path)
-        promo['日期'] = pd.to_datetime(promo['日期']).dt.strftime('%Y-%m-%d')
 
-# 合并饿了么 + 美团 推广明细 (daily_promo 通常只含部分历史, 不全)
+# 合并饿了么 + 美团 推广明细（从原始推广文件读取）
 mapping = pd.read_excel(os.path.join(BASE, 'channel_store_mapping.xlsx'))
 mt_to_qn = {(row['channel'], str(row['channel_store_id'])): str(int(row['qn_store_id']))
             for _, row in mapping.iterrows()}
